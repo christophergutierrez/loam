@@ -52,7 +52,7 @@
 - id: INV-anchor-independence  # corroborated requires cross-family; same-base never elevates above claimed
   category: absence
   scope: phase-end
-  check: no concept reaches corroborated without a cross-family endorsement in provenance.falsifiers
+  check: no concept reaches corroborated without a cross-family endorsement in provenance.falsifiers; AND a seeded same-base-endorsement fixture must FAIL to elevate above claimed (non-vacuous proof, parallel to M1.5's seeded conflict — else the elevation-block is untested if census produces no natural same-base case); the falsifier family is verified distinct from the extractor
 - id: INV-exact-binomial       # Wald/normal banned wherever intervals appear (esp. Phase 4)
   category: absence
   scope: final
@@ -64,7 +64,7 @@
 - id: INV-no-secrets           # secrets never enter any surface incl. prompt logs; redact source before prompt
   category: absence
   scope: every-pass
-  check: gitleaks-class scan of bundle + index + spool + serving logs clean; seeded fixture secret caught pre-redaction
+  check: gitleaks-class scan of bundle + index + spool + serving logs clean; seeded fixture secret caught pre-redaction; AND (positive) every redaction renders as a {{loam:secret …}} declarative token — never a mask or plausible default; AND no secret-DERIVED value (not even a hash) appears in any surface or the redaction registry (non-negotiable 7)
 - id: INV-derived-rebuildable  # anchor index, spool, caches are rebuildable and never committed; markdown bundle canonical
   category: absence
   scope: phase-end
@@ -80,10 +80,10 @@
 ## Phase 1 — Supply build: OKF bundle + stock pipeline → a real bundle  *(FULL detail; P0 §2 step 4)*
 - **objective:** produce a real, trust-tiered OKF bundle for the pilot repo from the stock pipeline. **prerequisites:** P0 PASS + outputs. **blast_radius:** the OKF concept schema is *persisted data* → **human gate on the schema freeze (M1.1)**. **rollback_boundary:** delete the generated bundle + index (both rebuildable). **exit_gate:** M1.1–M1.5.
 
-- **M1.1 — OKF concept schema + writer + validator** *(human-gated: schema freeze)*. Frontmatter per Supply §4 (`concept_id`, `sources[path/content_hash/span]`, `trust_tier`, `claim_type`, `provenance{extractor,falsifiers,resolution}`, `sample_stream`, timestamps). **gate:** a concept round-trips write→parse→validate; **a claim with no resolving anchor is rejected** (INV-evidence-contract); **the frozen schema is human-ratified before exit** (blast-radius: persisted data). baseline: no writer → fails.
+- **M1.1 — OKF concept schema + writer + validator** *(human-gated: schema freeze)*. Frontmatter per Supply §4 **reconciled to the canonical anchor** (`concept_id`, `sources[path / content_hash / span / **quote**]` — the typed anchor is path+hash+span+*quoted evidence* per Glossary + Supply §7.1, "no anchor, no admission"; the §4 example that omitted `quote` is a doc bug, fixed), `trust_tier`, `claim_type`, `provenance{extractor,falsifiers,resolution}`, `sample_stream`, timestamps. **gate:** a concept round-trips write→parse→validate; **a claim whose anchor lacks any of path/hash/span/quote, or whose anchor does not resolve, is rejected** (INV-evidence-contract); **the frozen schema is human-ratified before exit** (blast-radius: persisted data). baseline: no writer → fails.
 - **M1.2 — S0 deterministic triage** (reuse P0 criticality-band heuristics; **no triage model — that's P2**). **gate:** emits routing metadata (class/criticality/route) per file and **emits zero claims**; baseline: no triage → fails.
-- **M1.3 — S1 extraction (stock winning extractor) + redaction-before-prompt.** Reuse **P0 a4 (frozen prompt + decode config) + c1 (extraction runner) + the winning extractor in `models.lock`** for extraction; reuse the **a2 harness only for the redaction-before-prompt detector** (a2 is the mechanical/redaction harness, not the extractor). **gate:** claims cached with typed anchors + self-signals for the target set; redaction scan of every write surface clean (INV-no-secrets); baseline: no claims → fails.
-- **M1.4 — S3 anchor falsification + mechanical verification + resolution.** On the (small) pilot repo Phase 1 runs **census unconditionally** (ADR-0001); **the pre-flight feasibility estimator and the sampling-regime fallback are Phase 4 (P1)** — M1.4 must not depend on them. **S2 (T1.5 cheap falsifier) is skipped until P2.** **gate:** soft claims cross-family-falsified (census), mechanical claims verified deterministically; disagreements route to resolution (mechanical / cloud / human); baseline: nothing falsified → fails.
+- **M1.3 — S1 extraction (stock winning extractor) + redaction-before-prompt.** Reuse **P0 a4 (frozen prompt + decode config) + c1 (extraction runner) + the winning extractor in `models.lock`** for extraction; reuse the **a2 harness only for the redaction-before-prompt detector** (a2 is the mechanical/redaction harness, not the extractor). **gate:** claims cached with typed anchors + self-signals **for the defined target set (the pilot-repo census scope — the same denominator as M1.4, not a trivial subset)**; redaction scan of every write surface clean (INV-no-secrets); baseline: no claims → fails.
+- **M1.4 — S3 anchor falsification + mechanical verification + resolution.** On the (small) pilot repo Phase 1 runs **census unconditionally** (ADR-0001); **the pre-flight feasibility estimator and the sampling-regime fallback are Phase 4 (P1)** — M1.4 must not depend on them. **S2 (T1.5 cheap falsifier) is skipped until P2.** The T2 anchor is the **a3-verified cross-family** model. **gate:** soft claims cross-family-falsified (census); **M1.4 re-asserts `family(anchor) != family(extractor)` from `models.lock`** (so census can never yield a same-base "corroboration"); mechanical claims verified deterministically; disagreements route to resolution (mechanical / cloud / human); baseline: nothing falsified → fails.
 - **M1.5 — S4 write + compound + index** *(TRACER BULLET is a thin M1.2→M1.5 slice on ONE file done first)*. Write concepts with trust tier + full provenance; **census concepts carry `sample_stream: census`, mechanical-only concepts `unsampled` (never absent — mirrors P0 INV-census-only, so P1 dual-ledger tooling can't misread them)**; the **compound step generates inter-concept cross-links and a bundle-root index concept** (Consumption §3 Tier A entry point + the link graph `loam bundle` traverses); build the derived SQLite anchor index; **conflict objects are first-class**. **gate:** a real bundle exists in git; index rebuilds from it (INV-derived-rebuildable); tiers assigned; the bundle-root index concept + inter-concept links exist; **a doc-vs-code disagreement — naturally occurring or a seeded synthetic fixture (as P0 seeds the tripwire) — is stored as a conflict object, not dropped**; baseline: no bundle → fails.
 
 **Tracer bullet (do first):** triage 1 file → extract → verify+falsify → write 1 concept → build index → read it back through the index. Proves S0→S4 end-to-end before fleshing any stage.
@@ -94,11 +94,11 @@
 
 - **M2.1 — `loam-core` skeleton + corpus resolution** (nearest-ancestor bundle discovery, workspace-config override). **gate:** resolves the bundle root deterministically from a nested cwd; baseline: no resolver → fails.
 - **M2.2 — telemetry spool** (append-only SQLite, non-blocking, never-drop; spool-only degraded mode per ADR-0002) + `--json` scaffolding. **Built before the commands that emit to it** (fixes the ordering: every command's gate below asserts a spool emission). **gate:** an event appends and survives; **a write never blocks/fails when TraceStore is absent** (kill TraceStore, emit, must succeed); baseline: no spool → fails.
-- **M2.3 — `loam get`** *(TRACER BULLET: read → hash-verify → **emit to spool** end-to-end via the CLI — crosses the bundle+index AND spool seams)*. Read-time content-hash verification, inline **STALE** marker + changed-anchor list, trust tier always shown, `concept_read` event emitted. **gate:** returns a concept; a dirtied anchor yields STALE inline; hash verification is sub-perceptible; the read emits a `concept_read` event to the spool; baseline: no get → fails.
+- **M2.3 — `loam get`** *(TRACER BULLET: read → hash-verify → **emit to spool** end-to-end via the CLI — crosses the bundle+index AND spool seams)*. Read-time content-hash verification, inline **STALE** marker + changed-anchor list, trust tier always shown, `concept_read` event emitted. **gate:** returns a concept; a dirtied anchor yields STALE inline; read-time hash verification meets a **measured p95 latency budget** (target ~25 ms on the pilot bundle — set from the pilot, *measured, not asserted*); the read emits a `concept_read` event to the spool; baseline: no get → fails.
 - **M2.4 — `loam search`** (text/frontmatter over the bundle). **gate:** returns matches; a **zero-result search emits a `search_miss` event** to the spool; baseline: no search → fails.
 - **M2.5 — `loam bundle <task>`** dumb-first (index + explicit link traversal from the M1.5 link graph, size-capped, tiers surfaced; Consumption §5.3). **gate:** assembles a linked-concept set within the cap **by traversing the M1.5 cross-links from the bundle-root index concept**; emits `bundle_assembled` composition; baseline: no bundle cmd → fails.
 - **M2.6 — `loam observe` → inbox** (typed: claim/contradiction/concept-wrong/concept-missing/procedural). **gate:** writes a typed inbox entry with harness/task/evidence provenance and **never writes a concept** (INV-agents-never-write); emits `observation_filed`; baseline: no observe → fails.
-- **M2.7 — instruction stanzas** (CLAUDE.md/AGENTS.md block + Claude Code Skill + Hermes) generated via `loam init --refresh`. **gate:** stanzas ship only the instructions for **built** commands (bundle-before-explore, tier semantics, observe findings, STALE=check-source) and **do NOT instruct `loam lint` until lint exists** (Phase 4+); baseline: no stanzas → fails.
+- **M2.7 — instruction stanzas** (CLAUDE.md/AGENTS.md block + Claude Code Skill + Hermes) generated via `loam init --refresh`. **gate:** stanzas ship only the instructions for **built** commands (bundle-before-explore, tier semantics, observe findings, STALE=check-source) and **do NOT instruct `loam lint` until lint exists** (Phase 4+); **the CLI contract + inbox schema are human-ratified before Phase 2 exit** (blast-radius: public/consumed interface across the artifact seam, ADR-0006 — mirrors the M1.1 schema-freeze gate); baseline: no stanzas → fails.
 
 ## Phase 3 — Close KC2 (treatment arm)  *(detailed; Supply KC2 / Consumption KC3 one-time proof)*
 - **objective:** prove the token thesis on real work. **prerequisites:** Phase 2 (live CLI) + the P0 baseline arm (frozen d1 task set + baseline token table). **rollback_boundary:** discard treatment outputs. **exit_gate:** M3.1–M3.2.
@@ -148,7 +148,15 @@ Loam v1 is done when: a real trust-tiered OKF bundle exists (INV-evidence-contra
   - **[Minor] M1.1 schema-freeze gate not explicit** → **human ratification of the frozen schema is now an M1.1 exit condition.**
   - **[Minor] `--json`/spool wiring** folded into the M2.2 spool foundation.
 - **Reviewer positives recorded:** the phase DAG (1→2→3, 4–6 gated on predecessor) is acyclic/reachable; P0 outputs are correctly consumed as preconditions; S2/T1.5 correctly deferred to Phase 5; the M1.5 and M2.3 tracers are genuinely vertical; no ADR or non-negotiable contradicted; the coarse treatment of 4–6 is appropriate.
-- **Convergence:** pass 2 resolved 10, introduced 0, regressed 0. No Blocking/Material open. Verdict holds: READY_WITH_ASSUMPTIONS (gated on P0 = PASS + P0 outputs; far phases coarse-by-design).
+- **Convergence:** pass 2 resolved 10, introduced 0, regressed 0.
+- **Pass 3 — independent gate audit (retry, completed):** the gate-quality/blast-radius reviewer that died in pass 2 was re-run against the revised plan and **completed independently** → `gate_audit: independent`. **0 Blocking, 4 Material, 2 Minor — all accepted and applied:**
+  - **[Material] M1.1 schema omitted `quote`** — the canonical anchor is path+hash+span+**quote** (Glossary + Supply §7.1); freezing the §4-example schema would have violated INV-evidence-contract and left M2.3 nothing to verify against. → added `quote` to the M1.1 anchor schema + gate; **also fixed the Supply §4 frontmatter example** (glossary wins).
+  - **[Material] INV-no-secrets missed derived-values and masks** — scan-clean can pass with a stored secret *hash* or a plausible-default *mask*, both banned by non-negotiable 7. → added positive assertions: declarative `{{loam:secret …}}` tokens only (never masks); no secret-derived value (incl. hash) in any surface/registry.
+  - **[Material] Phase-2 human gate declared but not enforced** — CLI/inbox blast-radius gate wasn't an exit condition on any milestone. → M2.7 now requires human ratification of the CLI contract + inbox schema before Phase-2 exit (mirrors M1.1).
+  - **[Material] INV-anchor-independence vacuous without a negative fixture** — passes if no same-base case happens to occur. → added a seeded same-base-endorsement fixture that must FAIL to elevate above `claimed`; M1.4 re-asserts `family(anchor) != family(extractor)`.
+  - **[Minor] M2.3 "sub-perceptible" unquantified** → concrete measured p95 latency budget.
+  - **[Minor] M1.3 "target set" vague** → defined as the pilot-repo census scope (same denominator as M1.4).
+- **Convergence:** pass 3 resolved 6, introduced 0, regressed 0. No Blocking/Material open. Verdict holds: READY_WITH_ASSUMPTIONS (gated on P0 = PASS + P0 outputs; far phases coarse-by-design).
 
 ```json
 {
@@ -156,16 +164,16 @@ Loam v1 is done when: a real trust-tiered OKF bundle exists (INV-evidence-contra
   "task_tier": "full",
   "execution_policy": "cost_optimized",
   "model_routing": "current-model-only",
-  "passes": 2,
+  "passes": 3,
   "open_blocking_findings": 0,
   "open_material_findings": 0,
-  "gate_audit": "mixed (independent completeness reviewer + inline gate-quality/blast-radius audit; the gate reviewer subagent died on an API error)",
-  "staleness": { "head": "f652879", "branch": "p0-planning", "discovered_at": "2026-07-22" },
+  "gate_audit": "independent",
+  "staleness": { "head": "f652879 (+ uncommitted pass-3 edits)", "branch": "p0-planning", "discovered_at": "2026-07-22" },
   "preconditions": ["P0 = PASS", "P0 outputs loaded (winning models, tolerances, bands, claim-density)"],
-  "blast_radius_decisions": ["P0 PASS precondition","OKF schema freeze (M1.1)","CLI + inbox schema (Phase 2)","redaction on real bundle (INV-no-secrets)"],
+  "blast_radius_decisions": ["P0 PASS precondition","OKF schema freeze (M1.1, incl. quote)","CLI + inbox schema (Phase 2, human-ratified)","redaction on real bundle — tokens-not-masks, no derived values (INV-no-secrets)"],
   "human_decisions_required": ["P0 gate outcome","OKF schema freeze","CLI/inbox contract"],
   "coarse_phases": ["4 (P1)","5 (P2)","6 (P3)"],
   "plan_location": "docs/IMPLEMENTATION_PLAN.md",
-  "summary": "Consolidated post-P0 plan: phases 1-3 (supply build -> Rust CLI consumption incl. spool-first ordering -> KC2 treatment arm) detailed and executable once P0 passes; phases 4-6 (P1 gate + pre-flight estimator + mechanical lint, P2 compounding + semantic lint, P3 advanced consumption + MCP) coarse and contingent. Pass-2 review fixed 5 Material + 5 Minor incl. the dropped loam lint command; none open."
+  "summary": "Consolidated post-P0 plan: phases 1-3 detailed/executable-on-P0-PASS (supply build -> spool-first Rust CLI -> KC2 treatment), phases 4-6 coarse/contingent. 3 review passes (pass 3 independent gate audit) fixed 5+4 Material + 5+2 Minor incl. the dropped loam lint, spool-before-consumers ordering, and the missing anchor quote field; none open."
 }
 ```

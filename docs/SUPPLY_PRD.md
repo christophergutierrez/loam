@@ -72,6 +72,7 @@ sources:                      # every claim anchors to source spans
   - path: <repo-relative path>
     content_hash: <sha256 of source span>
     span: [start_line, end_line]
+    quote: <verbatim quoted evidence from the span>   # typed anchor = path+hash+span+quote (§7.1, Glossary); no anchor, no admission
 trust_tier: verified | corroborated | claimed
 claim_type: mechanical | soft   # mechanically checkable vs. intent/convention
 provenance:
