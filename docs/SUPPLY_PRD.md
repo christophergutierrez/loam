@@ -6,14 +6,14 @@
 |---|---|
 | Status | Draft v0.1 |
 | Owner | Chris Gutierrez |
-| Target platform | DGX Spark (GB10, 128GB unified, sm_121, ~273 GB/s) |
+| Reference platform | Sunk-cost owned hardware, reached through a uniform endpoint abstraction (ADR-0005). Reference config (not a requirement): DGX Spark (GB10, 128GB unified, sm_121, ~273 GB/s); equally H200s, a large Mac, or a proxy fronting any of these |
 | Date | 2026-07-22 |
 
 ---
 
 ## 1. Problem Statement
 
-Coding and knowledge agents spend the majority of their tokens on **rediscovery**: grepping, reading, and rebuilding a mental model of a corpus that was fully understood by a previous session and then discarded. Observed discovery overhead in typical agentic coding sessions is 60–80% of task tokens, and the resulting mental model evaporates at session end.
+Coding and knowledge agents spend the majority of their tokens on **rediscovery**: grepping, reading, and rebuilding a mental model of a corpus that was fully understood by a previous session and then discarded. The working hypothesis is that discovery overhead is 60–80% of task tokens; **P0 measures this rather than assuming it** (ADR-0003) — the baseline arm's discovery-vs-execution token split is the rediscovery share and therefore the ceiling on achievable savings. Either way the resulting mental model evaporates at session end.
 
 Local inference changes the economics of the obvious fix. Exhaustively processing every file in a corpus is prohibitive with metered cloud models but is a fixed-cost background job on owned hardware. The binding constraint is therefore **not compute — it is trustworthiness of what gets stored**. A wrong fact retrieved into an agent's context is worse than no fact: the agent trusts it and stops verifying. Extraction errors from small local models fail silently and compound.
 
@@ -22,7 +22,7 @@ Loam is a knowledge store plus an extraction/verification pipeline whose central
 ### 1.1 Why now
 
 - Google's Open Knowledge Format (OKF v0.1, published June 12, 2026) formalized the LLM-wiki pattern (markdown + YAML frontmatter, explicit links) into a portable standard, giving Loam a storage layer that is agent-native, greppable, diffable, and git-resident.
-- Sparse-MoE open models (Qwen3.6-35B-A3B, GPT-OSS-120B, Nemotron 3 Nano) fit the GB10's bandwidth-bound decode profile, making exhaustive multi-pass extraction feasible on one desk-side box.
+- Sparse-MoE open models (e.g. Qwen3.6-35B-A3B, GPT-OSS-120B, Nemotron 3 Nano) fit the bandwidth-bound decode profile of sunk-cost boxes, making exhaustive multi-pass extraction feasible on owned hardware. Model names are examples; tiers are defined by required properties and P0 selects the checkpoints (§5, ADR-0005).
 - Existing in-house components slot in directly: TraceStore (provenance, content-addressed blobs, demand signals), Killhouse (falsifiable gates, seeded-mutation audits), the skill evaluation framework (paired-run token benchmarking), and the Amesh LoRA training pipeline (weight-baking distillation target).
 
 ## 2. Goals and Non-Goals
@@ -89,7 +89,7 @@ last_validated: <timestamp>
 
 ## 5. Model and Adapter Topology
 
-One **workhorse base** carries all adapters; one **anchor base** stays stock. Sequential load/unload per pipeline stage (each stage gets the full 273 GB/s and full KV headroom); co-residency is not required by any stage.
+One **workhorse base** carries all adapters; one **anchor base** stays stock. Sequential load/unload per pipeline stage (each stage gets the box's full bandwidth and full KV headroom); co-residency is not required by any stage.
 
 | Tier | Model | Adapters | Role |
 |---|---|---|---|
@@ -99,7 +99,7 @@ One **workhorse base** carries all adapters; one **anchor base** stays stock. Se
 | T2 anchor falsifier | GPT-OSS-120B MXFP4 **or** Nemotron 3 Nano (stock) | **none — anchor stays stock** | Cross-family falsification; the decorrelation reference |
 | T3 escalation | Cloud frontier model | n/a | Only on (disagreement × criticality); rate is a monitored health metric |
 
-*Naming notes.* (1) Model tiers (T0–T3) and pipeline stages (S0–S4, §6) are distinct namespaces — S2 runs the T1.5 falsifier; S4 runs no model at all. (2) Triage deliberately uses the Qwen**3.5** dense line while extraction uses Qwen**3.6**-35B-A3B: Qwen3.6 ships no small dense variant. Any design that assumes a shared tokenizer (no re-tokenization between triage and extraction) therefore rests on Qwen3.5↔3.6 tokenizer compatibility, a to-be-verified fact (§16.7). (3) Names in this table are model families; the P0 protocol and serving recipes pin exact HF checkpoint IDs and vLLM image digests — family names are not deployable identifiers.
+*Naming notes.* (1) Model tiers (T0–T3) and pipeline stages (S0–S4, §6) are distinct namespaces — S2 runs the T1.5 falsifier; S4 runs no model at all. (2) Triage deliberately uses the Qwen**3.5** dense line while extraction uses Qwen**3.6**-35B-A3B: Qwen3.6 ships no small dense variant. Any design that assumes a shared tokenizer (no re-tokenization between triage and extraction) therefore rests on Qwen3.5↔3.6 tokenizer compatibility, a to-be-verified fact (§16.7). (3) Names in this table are model families; the P0 protocol and serving recipes pin exact HF checkpoint IDs and vLLM image digests — family names are not deployable identifiers. (4) **Tiers are defined by required properties, not checkpoints, and the backend is agnostic** (ADR-0005): T0 small dense; T1 sparse-MoE, adapter-carrying, fits the box's KV headroom; T2 *different base family from T1*, stock, strong entailment. Hardware is likewise reference-config, not dictated. P0's model-floor experiment is the selection mechanism, and whether a cross-family pair *stands up at all* on the chosen backend is an explicit P0 shakedown gate. (5) **Census-by-default (ADR-0001) makes the anchor falsify every soft claim, so T2 is selected for throughput, not raw strength** — favoring a lighter/faster resident cross-family model (e.g. Nemotron-class) with an optional heavier nightly pass (e.g. 120B-class).
 
 **Design rules:**
 
@@ -108,16 +108,18 @@ One **workhorse base** carries all adapters; one **anchor base** stays stock. Se
 3. **Error diversity ranking** (spend accordingly): different base family > different evidence context (file alone vs. file+callers vs. file+docs) > different task (generation vs. entailment) > different training mix > different seed (≈ worthless).
 4. **Adapter economics.** Adapters bake the extraction ontology, instructions, and few-shot examples into weights, deleting 2–4K tokens of system prompt per file pass, and raise schema adherence. Multi-LoRA hot-swap makes the adapter library ~free at serve time.
 5. **Sizing floor is empirical.** Day-one experiment: run 4B, 35B-A3B, and one large model over the same labeled 100-file sample; the smallest model whose precision clears the stratum tolerance wins its tier. Cheap extraction that fails falsification is not cheap.
-6. Pin exact vLLM image tags/digests per model per recipe (sm_121 flags are model-specific; copying flags across models silently regresses).
+6. Pin exact vLLM image tags/digests per model per recipe (backend-specific flags — e.g. sm_121 on a GB10 — are model-specific; copying flags across models or backends silently regresses).
 
 ## 6. Pipeline (cold start ≡ steady state)
 
 Phased batches with sequential model loading. Steady-state input is the content-hash dirty set; onboarding input is the full corpus. Stages are numbered **S0–S4**; model tiers keep the T0–T3 names of §5 (distinct namespaces).
 
+**Pre-flight sizing (before S0, per corpus).** A deterministic estimate — scannable-file count (corpus-inclusion filter applied) × per-file token estimate × measured backend throughput, compared against the gardening window (~8h provisional) — decides the **regime for anchor coverage of soft claims** (ADR-0001): *census regime* (falsify every soft claim) when full census fits, else *sampling regime* (the §8 apparatus rations coverage within the window's budget, criticality×heat first). Mechanical claims are verified deterministically and exhaustively in both regimes; the fork is soft-claim coverage only. The estimate is sharp only after P0 supplies claim-density and anchor-claims-per-GPU-hour numbers; a rough sizer before then.
+
 - **S0 — Triage sweep** (runs the T0 model). Small model + deterministic heuristics over every file. Deterministic first: import fan-in centrality, git churn, test coverage, file size, public-contract detection → criticality score. LLM only for what heuristics cannot judge (authoritative doc vs. scratch note). Output: routing metadata (file class, complexity, criticality, adapter route, evidence-context recipe, priority). **S0 emits no claims** — low-precision claims would waste compute or, worse, anchor later passes.
-- **S1 — Extraction.** T1 workhorse + extraction adapter (stock + full prompt on generation 0). Long-prefill/short-output profile — the GB10's favorable regime. Claims cached with typed evidence anchors and content hashes. Extractor self-signals (logprob dips, schema-retry counts) logged from pass one; they are free and later serve as clustering coordinates (§9).
+- **S1 — Extraction.** T1 workhorse + extraction adapter (stock + full prompt on generation 0). Long-prefill/short-output profile — the favorable regime for a bandwidth-bound sunk-cost box. Claims cached with typed evidence anchors and content hashes. Extractor self-signals (logprob dips, schema-retry counts) logged from pass one; they are free and later serve as clustering coordinates (§9).
 - **S2 — Cheap falsification** (once the T1.5 falsifier adapter exists). Same-base entailment sweep over cached claims; kills sloppy errors at near-zero marginal cost.
-- **S3 — Anchor falsification.** Unload workhorse, load the T2 anchor, falsify surviving claims per the sampling design (§8): 100% of critical, sampled remainder, directed pursuit on hits.
+- **S3 — Anchor falsification.** Unload workhorse, load the T2 anchor, falsify surviving soft claims by the regime chosen at pre-flight (ADR-0001): **census by default** (every soft claim), or — when census won't fit the window — the §8 sampling design (budget-filling, criticality×heat first). 100% of critical is always census; directed pursuit on hits. Mechanical claims are already verified deterministically (§7.2) and do not consume the anchor budget.
 - **Resolution path.** Disagreement → mechanical check where the claim type allows (tree-sitter, import analysis, schema introspection — zero tokens) → cloud on disagreement×criticality → human queue for genuine source conflicts.
 - **S4 — Write + compound.** No model resident. Resolved claims write to the store with trust tier and full provenance. Qualifying resolutions join the adapter training pool (§10). Weakness registry and unexplained bucket update (§9).
 
@@ -140,11 +142,14 @@ Every claim admitted to the store satisfies:
 
 ## 8. Sampling Design (Falsification Budget Allocation)
 
-Method: **zero-acceptance stratified sampling with adaptive (Thompson-style) cluster pursuit**, denominated in GPU-hours.
+**Regime first (ADR-0001).** Cross-family falsification of soft claims is **census by default** — because local compute is a sunk cost, the anchor falsifies *every* soft claim. This section (sampling) is the **fallback** the pre-flight estimate (§6) selects only when full census won't fit the gardening window; there, coverage is *budget-filling* (spend the whole window, criticality×heat first — never a fixed 1% floor), the overflow tail stays `claimed` and drains across successive gardening passes, and the apparatus below also serves its always-on roles: measuring extractor precision (kill criteria) and discovering failure clusters (§9). 100% of `critical` is census in either regime.
+
+Method (sampling regime): **zero-acceptance stratified sampling with adaptive (Thompson-style) cluster pursuit**, denominated in GPU-hours.
 
 1. **Strata** = useful distinctions: file type × criticality band × adapter route, extensible to induced features (§9). Criticality band `critical` → census (100%).
 2. **Tolerance-derived minimums (exact binomial — never normal approximation).** Per-stratum error tolerance is the configured primitive; sample size derives from it via the exact zero-failure bound: P(0 errors in n) = (1−p)ⁿ, i.e., the Rule of Three (95% upper bound ≈ 3/n on a clean sample). 1% tolerance → 300 clean; 0.5% → 600; 3% → 100. The Wald/normal interval is banned: it degenerates to [0,0] at zero observed errors and its np≳5 validity condition fails exactly in the rare-error regime this system lives in.
 3. **Interval reporting**: Clopper-Pearson (or Jeffreys). **Cross-batch accumulation**: per-stratum Beta-binomial posterior — evidence compounds across pipeline runs without repeated-peeking inflation; priors are tunable (new adapter route starts skeptical; long-clean stratum starts trusting).
+3a. **Three-state broken-stratum tripwire (ADR-0004).** Read the same Clopper-Pearson interval from *both* ends: **PASS** = upper bound ≤ tolerance (proven clean); **UNPROVEN** = interval straddles tolerance (keep sampling — the §8.8 escalation path); **BROKEN** = *lower* bound > tolerance (proven to exceed it — the extractor has left the rare-error regime). BROKEN fires an alarm, quarantines that stratum (claims withheld from promotion, failure cluster routed to the weakness registry + human queue), and *stops* sampling that stratum — more samples do not fix a broken extractor. It quarantines the offending stratum only; healthy strata proceed. Self-scaling: a single stray error just widens the interval (no alarm), while *several* errors trip it.
 4. **Census cutoff.** If the derived sample exceeds ~0.5 of the stratum population, sample the whole stratum (finite population correction makes sampling gains collapse there anyway).
 5. **Dual ledgers — never mix denominators.** `random` stream → unbiased rate estimation; drives health dashboards and kill criteria. `directed` stream → detection and cleanup; drives quarantine and re-extraction. Pooling directed samples into rate estimates biases the estimate (you looked where errors live); one schema field (`sample_stream`) prevents the corruption forever.
 6. **Directed pursuit.** On a hit: induce the failure predicate (§9), sample more *in that direction* — files matching the predicate — while maintaining (and up-weighting) random samples within the stratum. Sequential probability ratio test permits early stop on strong evidence either way.
@@ -153,7 +158,7 @@ Method: **zero-acceptance stratified sampling with adaptive (Thompson-style) clu
 9. **Event-triggered elevation.** Every adapter promotion and every corpus onboarding runs elevated sampling for the first N files — the moments the error distribution most likely shifted.
 10. **Budget cap.** All of the above allocates within a per-run GPU-hour budget (files are the wrong unit: a 200K-token file+callers bundle costs ~50× a 4K-token file).
 
-**What the sample does and does not do (explicit, so nobody misreads it later).** The random sample is *measurement*: it bounds the extractor's error rate per stratum at constant cost regardless of corpus size. It is not *protection*: at 1% coverage, ~99% of non-critical claims enter unfalsified, and admitted-error count grows with corpus size even while the rate estimate stays sharp. Protection comes from the census on critical strata plus trust-tier quarantine plus use-time promotion. The sample's job is to detect an unhealthy extractor; the tiers' job is to contain damage while it is fixed.
+**What falsification does, by regime (explicit, so nobody misreads it later).** Under **census-by-default (ADR-0001), cross-family falsification *is* the protection** for soft claims: every soft claim is anchor-falsified, so surviving soft claims reach `corroborated` and the admitted-error surface is bounded by anchor recall, not by a sample. The "measurement, not protection" caveat applies **only in the sampling-regime fallback** (huge repos where census won't fit the window): there the random sample is *measurement* — it bounds the extractor's error rate per stratum at constant cost regardless of corpus size — while *protection* for the unfalsified overflow comes from the census on critical strata, trust-tier quarantine (`claimed` = not-yet-corroborated, draining across gardening passes), and use-time promotion. In both regimes the random sample's job is to detect an unhealthy extractor (via the §8.3a tripwire); the tiers' job is to contain damage while it is fixed.
 
 ## 9. Failure Predicates, Weakness Registry, and Feature-Space Debt
 
@@ -193,8 +198,8 @@ The verification gate is itself under test, continuously.
 
 **Kill criteria (falsifiable; any failure kills or gates the project). Numeric targets are provisional until the P0 Experiment Protocol fixes per-stratum tolerances — the criteria's form is the commitment:**
 
-1. **Extraction precision**: on a hand-labeled ~100-file day-one sample, best local extractor precision clears the per-stratum tolerances of §8.2. If no local model clears it, the sunk-cost thesis fails.
-2. **Token economics**: ≥30% tokens-per-task reduction on paired runs (existing harness) against a matched task set, with no task-quality regression.
+1. **Extraction precision**: on a hand-labeled ~100-file day-one sample, best local extractor precision clears the per-stratum tolerances of §8.2, **re-weighted per ADR-0004**: the gate rests on **soft-claim precision** (no production backstop) plus a tight **global anchor/type-correctness bound (≤1%)**; mechanical *truth* precision is relaxed to a yield/competence readout (a wrong mechanical claim fails deterministic verification and is never admitted, so it governs yield, not admitted-fact trust). If no local model clears the soft + anchor/type bar, the sunk-cost thesis fails.
+2. **Token economics**: ≥30% tokens-per-task reduction on paired runs (existing harness) against a matched task set, with no task-quality regression — **sanity-checked against the measured rediscovery ceiling (ADR-0003)** before the treatment arm runs: a 30%-of-total target must not exceed what the discovery/execution split says is capturable, or the target is revised rather than pursued.
 3. **Staleness bound**: after one week of normal repo churn, ≤2% of retrieved concepts contradicted by current source.
 4. **Gate recall**: falsifier tier catches ≥90% of seeded mutations, measured per §11, sustained across adapter generations.
 
@@ -228,9 +233,9 @@ Ascending ambition; the wiki is the intermediate representation feeding all down
 ## 16. Open Questions
 
 1. PEFT/QLoRA target-module support for Qwen3.6 Gated DeltaNet layers (blocker check for §10; fallback base: Qwen3-30B-A3B-Instruct-2507).
-2. Anchor choice under memory/strength trade: GPT-OSS-120B (stronger, ~60GB, tight KV) vs. Nemotron 3 Nano (~17GB, 80GB+ KV headroom) vs. Nano-resident + nightly 120B heavy-falsification phase.
+2. Anchor choice under memory/strength trade: GPT-OSS-120B (stronger, ~60GB, tight KV) vs. Nemotron 3 Nano (~17GB, 80GB+ KV headroom) vs. Nano-resident + nightly 120B heavy-falsification phase. **Census-by-default (ADR-0001) tilts this toward throughput** — the anchor now falsifies every soft claim — favoring the Nano-resident + nightly-120B option; final choice is a P0 selection criterion.
 3. Soft-claim ontology v0: which claim types beyond mechanical (intent, convention, gotcha, rationale, contract) and their per-type tolerances.
 4. TraceStore integration surface for heat signals and use-time promotion events (schema addition vs. sidecar).
 5. Human queue UX for conflict objects and weakness-registry review (git-based? TUI?).
-6. Default per-stratum tolerances and the GPU-hour budget for the nightly run (empirical after P0).
+6. Default per-stratum tolerances and the GPU-hour budget for the nightly run (empirical after P0). **Anchor-claims-per-GPU-hour is promoted to a P0 primary readout (ADR-0001)**: it sizes the gardening window and calibrates the §6 pre-flight census/sampling estimator.
 7. Qwen3.5↔Qwen3.6 tokenizer compatibility — verify before any design relies on a shared tokenizer (no re-tokenization) between triage (S0) and extraction (S1); the two stages deliberately use different model lines (§5 naming notes).

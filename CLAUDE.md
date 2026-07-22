@@ -1,6 +1,6 @@
 # Loam — Repo Instructions
 
-Loam is a knowledge store + local extraction/verification pipeline for AI agents on a DGX Spark (GB10). The write path is the product: knowledge is admitted only through a verification gate with a measured error rate. Currently docs-only; P0 (the model-floor experiment) gates all building.
+Loam is a knowledge store + local extraction/verification pipeline for AI agents, running on **sunk-cost owned hardware reached through an endpoint abstraction** (reference config, not a requirement — e.g. a DGX Spark/GB10, H200s, or a large Mac; ADR-0005). The write path is the product: knowledge is admitted only through a verification gate with a measured error rate. Currently docs-only; P0 (the model-floor experiment) gates all building.
 
 ## Read first
 
@@ -8,6 +8,7 @@ Loam is a knowledge store + local extraction/verification pipeline for AI agents
 - `docs/SUPPLY_PRD.md` — extraction, verification, sampling, storage.
 - `docs/CONSUMPTION_PRD.md` — CLI, telemetry, write boundary, linter.
 - `docs/P0_EXPERIMENT_PROTOCOL.md` — the gate before component TRDs.
+- `docs/adr/` — settled decisions that refine the PRDs (ADR-0001…0006). Where an ADR and older PRD prose disagree, the ADR wins (same rule as the glossary).
 
 ## Non-negotiables (settled; don't reopen without the owner)
 

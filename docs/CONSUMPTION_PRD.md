@@ -97,11 +97,11 @@ The inbox accepts `procedural` observations ("this build command is the one that
 
 Minimum event types, each carrying harness ID, task ID, bundle ID, timestamp: `concept_read` (+ trust tier, stale flag), `search_miss` (+ query shape), `bundle_assembled` (+ composition), `post_bundle_exploration` (agent grepped/read source after consuming a bundle — inferable from trace adjacency), `observation_filed` (+ type), `lint_shown` / `lint_outcome` (§8.5), `task_outcome` (join key to TraceStore's existing three-tier outcome signals).
 
-**Durability (decided, not deferred).** Events append to a local SQLite spool and flush to TraceStore asynchronously. Emission never blocks or fails a CLI command, and undelivered events are never silently dropped — the spool persists until acknowledged flush, and spool depth/age is itself a health metric. A CLI that hangs when TraceStore is down gets uninstalled; a CLI that silently drops events corrupts every feedback loop in §7.2. Spool-only operation (no TraceStore reachable) is a supported degraded mode, which also lets Consumption P0 proceed before the TraceStore intake surface (Supply §16.4) is settled.
+**Durability (decided, not deferred).** Events append to a local SQLite spool and flush to TraceStore asynchronously. Emission never blocks or fails a CLI command, and undelivered events are never silently dropped — the spool persists until acknowledged flush, and spool depth/age is itself a health metric. A CLI that hangs when TraceStore is down gets uninstalled; a CLI that silently drops events corrupts every feedback loop in §7.2. Spool-only operation (no TraceStore reachable) is a supported degraded mode, which also lets Consumption P0 proceed before the TraceStore intake surface (Supply §16.4) is settled. **v1 depends on TraceStore for nothing (ADR-0002): the feedback loops in §7.2 are P1+ *amplifiers*, dark until TraceStore consumes the spool, and their v1 absence is an accepted degradation (static-only criticality, benchmark-only economics, hash-only staleness) — not a blocker.**
 
 ### 7.2 The feedback loop family
 
-Each loop is a distinct mechanism the supply side consumes; enumerated so each gets built and monitored deliberately:
+Each loop is a distinct mechanism the supply side consumes; enumerated so each gets built and monitored deliberately. **All five are P1+ amplifiers (ADR-0002): they light up when TraceStore consumes the spool, and v1 depends on none of them.**
 
 1. **Heat → criticality promotion.** Read frequency measures *exposure-if-wrong*: a bad fact in a hot concept damages many tasks. Heat therefore legitimately raises criticality scores, moving hot concepts (and their source files) toward the census stratum — including files not yet on any hand-maintained critical list. This is principled, not a heuristic.
 2. **Miss → extraction demand.** `search_miss` is the concrete sensor for Supply §3's demand-driven processing. Repeated misses with a common query shape also reveal **ontology gaps** — a claim *type* the extractor doesn't produce yet — which feed Supply §16.3.
@@ -147,7 +147,7 @@ With the linter in place, every writer faces the same falsification discipline a
 
 1. **Consultation**: ≥70% of agent sessions on ingested corpora consult Loam before source exploration, per harness, after instruction iteration. Persistent failure means the integration model is wrong, not merely the stanzas.
 2. **Usefulness**: bundle fallback rate — ≤30% of consumed bundles followed by immediate fallback exploration for the same question (loop §7.2.3). Persistent failure means extraction ontology or bundling is missing what agents actually need.
-3. **Live economics**: outcome-joined token delta (loop §7.2.4) sustains the ≥30% reduction of Supply kill criterion 2 on real work, not just benchmarks.
+3. **Live economics**: outcome-joined token delta (loop §7.2.4) sustains the ≥30% reduction of Supply kill criterion 2 on real work, not just benchmarks. **This is the *continuous* form and is P1+ (ADR-0002); the one-time proof is the TraceStore-independent P0 paired-run benchmark, whose target is sanity-checked against the measured rediscovery ceiling (ADR-0003).**
 4. **Lint precision**: ≥60% of semantic-tier lint warnings result in an action (fix or filed observation) rather than ignore. Below that, the linter is noise and gets demoted to manual-only until fixed.
 
 **Health metrics:** consultation rate per harness; miss rate and miss-query clustering; stale-read frequency; inbox volume by type and by harness; lint disposition distribution; read-then-grep rate by trust tier; heat-promotion queue size.
@@ -155,7 +155,7 @@ With the linter in place, every writer faces the same falsification discipline a
 ## 10. Phasing
 
 - **P0 — Files + CLI core.** Bundle index conventions; `loam-core` library; `get` (with live anchor check), `search`, dumb-first `bundle` (§5.3 — it is the headline instruction of every stanza, so it ships with the stanzas, and the consultation baseline is measured against the real surface from day one), `observe` (inbox write); corpus resolution; telemetry emission to the local spool, flushing to TraceStore event intake when available (§7.1 durability). Instruction stanzas for Claude Code and Hermes.
-- **P1 — Loops.** Miss/heat/outcome loop consumers in the supply-side pipeline; consultation-rate dashboards; remaining harness stanzas.
+- **P1 — Loops.** Miss/heat/outcome loop consumers in the supply-side pipeline; consultation-rate dashboards; remaining harness stanzas. (These are the ADR-0002 amplifiers; they require TraceStore consuming the P0 spool.)
 - **P2 — Lint.** Mechanical tier; semantic tier via falsifier adapter; three-exit UX; advisory hook; disposition telemetry.
 - **P3 — Data-gated extensions.** MCP wrapper for low-compliance harnesses (if any); ranking layer for `bundle` (if §9.2 demands it); procedural-queue handoff to skill distillation; CI/CD lint pilot.
 
