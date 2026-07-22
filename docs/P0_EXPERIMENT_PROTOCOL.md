@@ -56,16 +56,18 @@ The one genuinely external dependency is the **Telemetry Event Contract** (Loam�
 
 ## 5. Strata, tolerances, and the sample-size math
 
-P0 strata are deliberately coarser than production strata (Supply §8.1) — criticality band × claim type — because ~1,000 claims can't power a file-type × route matrix, and the decision doesn't need one.
+P0 strata are deliberately coarser than production strata (Supply §8.1) — criticality band × claim type — because ~1,000 claims can't power a file-type × route matrix, and the decision doesn't need one. **The gate is re-weighted per ADR-0004**: soft strata are the primary gate (no production backstop), a tight global anchor/type bound guards the errors that bypass every backstop, and mechanical *truth* is a cheap yield/competence readout rather than a tight gate (a wrong mechanical claim fails deterministic verification and is never admitted).
 
-| Stratum | Tolerance (provisional) | Clean claims needed (Rule of Three, 95%) | Expected supply from ~100 files |
-|---|---|---|---|
-| critical × mechanical | 1% | 300 | ~250–400 (critical files are claim-dense; harness-scored, so cheap to label) |
-| critical × soft | 3% | 100 | ~100–200 |
-| standard × mechanical | 3% | 100 | ~200–300 |
-| standard × soft | 5% | 60 | ~150–250 |
+| Stratum | Tolerance (provisional) | Clean claims needed (Rule of Three, 95%) | Expected supply from ~100 files | Role |
+|---|---|---|---|---|
+| critical × soft | 3% | 100 | ~100–200 | **primary gate** |
+| standard × soft | 5% | 60 | ~150–250 | **primary gate** |
+| anchor/type correctness (all strata) | 1% (`bad_anchor` + `bad_type` combined) | 300 | across all ~800–1,200 claims — easily met | **tight** — these bypass every backstop |
+| mechanical truth (critical & standard) | yield readout: ≥X% of emitted mechanical claims survive verification | n/a (auto-scored, not a truth-precision gate) | ~450–700, harness-scored | competence/yield, not a gate |
 
-Sampling weights: ~60 of the ~100 files drawn from the critical band (oversampled relative to corpus share, since its tolerances are tightest), ~40 from standard. The `low` band is excluded from P0 entirely — its tolerance would be loose enough that it cannot change the gate decision.
+The old critical×mechanical 1% gate is retired (ADR-0004): it put the tightest tolerance and the worst supply strain (~250–400 supplied vs a 300-and-rising need) on the *lowest*-admission-risk stratum. Its discipline moves to the anchor/type row.
+
+Sampling weights: ~60 of the ~100 files drawn from the critical band (oversampled relative to corpus share, since the critical×soft primary gate is claim-dense there and the anchor/type bound wants volume), ~40 from standard. The `low` band is excluded from P0 entirely — its tolerance would be loose enough that it cannot change the gate decision.
 
 **Rules that make the numbers real rather than decorative:**
 
@@ -82,26 +84,32 @@ Sampling weights: ~60 of the ~100 files drawn from the critical band (oversample
 - Qwen3.6-35B-A3B (the presumptive T1 workhorse)
 - One large reference: GPT-OSS-120B (upper bound on what local can do; doubles as anchor-model shakedown)
 
+Candidates are **examples** — tiers are defined by required properties and the backend is agnostic (ADR-0005); these names are the reference slate P0 happens to select from. Two gates ride on this experiment beyond the precision decision: **(a) the cross-family shakedown** — can a T1 + T2 from *different base families* stand up on the chosen backend *at all* (an explicit pass/fail; without it `corroborated` and anchor-independence are unbuildable); and **(b) anchor throughput** — see the promoted primary readout below.
+
 **Conditions, identical across candidates:** stock weights (generation 0 — no adapters exist), the same full extraction prompt with ontology v0 and few-shot examples, the same evidence-context recipe per file (file-alone for P0; context recipes are a P2 variable), temperature 0 or fixed low, one run per candidate (self-consistency voting is an adapter-era luxury).
 
 **Scoring:** every candidate's claims over the same frozen sample, labeled per §4. Mechanical claims are auto-scored by the harness; human labeling effort concentrates on soft claims. Per-candidate, per-stratum precision with exact intervals.
 
 **Decision rule (Supply §5.5, made concrete):** the smallest candidate that passes *all four strata* wins the T1 tier. If only the 120B-class passes, T1 economics need rework before proceeding (that is a *gate*, not a kill). If no local candidate passes any configuration, kill criterion 1 has fired.
 
-**Secondary readouts (recorded, not gating):** schema-retry counts and logprob-dip statistics per candidate (the free self-signals of Supply §9), wall-clock and GPU-hours per file by stratum (seeds the Supply §8.10 budget unit), and `bad_anchor` rates specifically (anchor discipline is the cheapest thing an adapter can fix — a candidate failing *only* on anchors is a different situation than one failing on truth).
+**Primary readouts (promoted, ADR-0001/0004):** **anchor-claims-per-GPU-hour** on the chosen T2 (it sizes the census/sampling gardening window and calibrates the Supply §6 pre-flight estimator), and per-candidate **`bad_anchor` + `bad_type` rates** (now the tight ≤1% global gate of §5, since these bypass every backstop).
+
+**Secondary readouts (recorded, not gating):** schema-retry counts and logprob-dip statistics per candidate (the free self-signals of Supply §9), wall-clock and GPU-hours per file by stratum (seeds the Supply §8.10 budget unit), and mechanical-claim **verification-survival rate** (the §5 yield readout that replaced the old critical×mechanical truth gate).
 
 ## 7. Kill criterion 2 — baseline arm
 
 Runs concurrently with §6; shares nothing with it but the repo.
 
 - **Task set**: 20–30 real tasks on the pilot repo, drawn from recent issue/commit history, spanning task classes (bug fix, feature extension, "explain/where-is" questions). Frozen before any Loam artifacts exist.
-- **Measurement**: existing paired-run harness records tokens-per-task, split into discovery vs. execution where the harness can tell, plus the three-tier task outcome.
+- **Measurement**: existing paired-run harness records tokens-per-task plus the three-tier task outcome. The **discovery-vs-execution token split is a *primary* readout (ADR-0003)**, not incidental: it is the rediscovery share and therefore the ceiling on achievable savings. It is measured at **tool-call-class** granularity — discovery = read-only exploration calls (grep/search/read/ls/cat) + the reasoning turns ingesting their outputs; execution = edit/write/test-run/build calls + surrounding reasoning; mixed reasoning turns attributed both ways to yield a **conservative/liberal band** (report the ceiling as an interval, not a point).
+- **P0 prerequisite (cheap, verify first, ADR-0003)**: the harness must emit **per-call token counts**, not only total-tokens-per-task, or the split is not computable — if it logs only totals, add that instrumentation before this arm runs.
+- **KC2 ceiling gate (ADR-0003)**: before the treatment arm, check Supply KC2's ≥30% target against the measured rediscovery ceiling — a 30%-of-total target must not exceed what the split says is capturable, or the target is revised with written rationale rather than pursued.
 - This is the **baseline arm only**. The treatment arm (same task classes, live bundle, real CLI) runs at step 6 of §2. Matching is by task class, not literal task identity, to dodge memorization effects.
 
 ## 8. Deliverables and exit
 
 - `p0/sample_manifest.json`, `p0/labels/`, `p0/models.lock`, per-candidate result tables with exact intervals, baseline-arm token table.
-- **P0 Results memo** (one page): per-stratum pass/fail per candidate, the gate decision with the winning model (or the kill/gate rationale), finalized tolerances for P1, and the observed claim-density and GPU-hour numbers that turn the Supply §8.10 budget and §16.6 open question into empirical answers.
+- **P0 Results memo** (one page): per-stratum pass/fail per candidate (soft gates + anchor/type bound; mechanical yield readout), the gate decision with the winning model (or the kill/gate rationale), the **cross-family shakedown result** (did a T1+T2 different-family pair stand up on the backend), finalized tolerances for P1, the **rediscovery-ceiling interval** (baseline arm) with the KC2-target check, and the observed claim-density, **anchor-claims-per-GPU-hour**, and GPU-hour numbers that turn the Supply §8.10 budget, the §6 pre-flight estimator, and §16.6 into empirical answers.
 - On pass: component TRDs may begin, in the §2 order. On fail: the results memo *is* the kill/gate document.
 
 ## 9. Open questions (scoped to this protocol)
