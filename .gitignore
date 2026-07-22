@@ -1,0 +1,53 @@
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# --- Secrets / local env (redaction contract: secrets never enter any surface) ---
+.env
+.env.*
+*.pem
+*.key
+
+# --- Rust (loam-core / CLI) ---
+target/
+# Cargo.lock stays committed (binary crates)
+
+# --- Python (pipeline / experiments) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# --- Models & inference caches (never in git; pin IDs in models.lock instead) ---
+.fastembed_cache/
+models/
+*.gguf
+*.safetensors
+*.bin
+wandb/
+
+# --- Derived Loam artifacts (rebuildable from the bundle; never a source of truth) ---
+# anchor index, telemetry spool, claim caches
+*.sqlite
+*.sqlite3
+*.db
+.loam-cache/
+
+# --- P0 experiment: manifests, labels, and models.lock ARE committed; raw model output is not ---
+p0/raw/
+p0/runs/
+
+# --- Scratch ---
+scratch/
+tmp/
