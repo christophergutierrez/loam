@@ -1,0 +1,15 @@
+[package]
+name = "loam"
+version = "0.0.0"
+edition = "2021"
+description = "loam-core: the demand-side CLI over an OKF bundle (ADR-0006). Built ahead of P0 per ADR-0007."
+
+[lib]
+name = "loam_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "loam"
+path = "src/main.rs"
+
+[dependencies]
