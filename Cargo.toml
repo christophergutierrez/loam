@@ -2,6 +2,7 @@
 name = "loam"
 version = "0.0.0"
 edition = "2021"
+rust-version = "1.85"
 description = "loam-core: the demand-side CLI over an OKF bundle (ADR-0006). Built ahead of P0 per ADR-0007."
 
 [lib]

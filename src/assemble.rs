@@ -2,7 +2,7 @@
 //! (Consumption §5.3): seed by search, then follow explicit markdown links,
 //! size-capped, trust tiers surfaced. Emits `bundle_assembled`.
 
-use crate::concept::parse_concept;
+use crate::concept::{is_valid_concept_id, parse_concept};
 use crate::search::search;
 use crate::spool::{Event, Spool};
 use anyhow::Result;
@@ -63,15 +63,23 @@ pub fn assemble(
         if seen.contains(&id) {
             continue;
         }
-        if concepts.len() >= max_concepts {
-            capped = true;
-            break;
+        // Reject traversal/malformed ids (e.g. a `](../evil.md)` link) so link
+        // following can never escape the bundle.
+        if !is_valid_concept_id(&id) {
+            continue;
         }
         let path = bundle_dir.join(format!("{id}.md"));
         let concept = match parse_concept(&path) {
             Ok(c) => c,
-            Err(_) => continue,
+            Err(_) => continue, // dangling/nonexistent link — not an overflow
         };
+        // Only now, with a genuine unseen parseable concept in hand, does the
+        // cap decide: capped means a real concept didn't fit (not that the queue
+        // held already-seen or dangling ids).
+        if concepts.len() >= max_concepts {
+            capped = true;
+            break;
+        }
         seen.insert(id.clone());
         concepts.push(BundleEntry {
             concept_id: concept.frontmatter.concept_id.clone(),
@@ -129,6 +137,16 @@ mod tests {
             got.contains(&"_index".to_string()),
             "linked _index missing: {got:?}"
         );
+        assert!(!b.capped, "no overflow expected within max=16");
+    }
+
+    #[test]
+    fn dangling_link_does_not_set_capped() {
+        // 'dangling' links to a nonexistent concept; with room to spare, capped
+        // must stay false — the trust signal an agent uses to decide fallback.
+        let b = assemble(&bundle(), "danglingterm", 16, None, "test", "t").unwrap();
+        assert_eq!(ids(&b), vec!["dangling".to_string()]);
+        assert!(!b.capped, "a dangling link is not an overflow");
     }
 
     #[test]

@@ -50,6 +50,10 @@ impl Spool {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(path)?;
+        // Concurrency hardening for the multi-agent consumer model: WAL lets a
+        // writer proceed without blocking readers; busy_timeout waits out a lock
+        // instead of returning SQLITE_BUSY (which best-effort would silently drop).
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")?;
         conn.execute(
             "CREATE TABLE IF NOT EXISTS events (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,11 +80,12 @@ impl Spool {
     }
 
     /// Emit, swallowing and logging any error so a CLI command never fails or
-    /// blocks on telemetry (Consumption §7.1: never blocks, never silently drops
-    /// — a failure is logged, not hidden).
+    /// blocks on telemetry (Consumption §7.1: never blocks). Note: a failed
+    /// write drops *this telemetry event* — there is no retry yet (P1: durable
+    /// flush). The command's real work and the source corpus are unaffected.
     pub fn emit_best_effort(&self, e: &Event) {
         if let Err(err) = self.emit(e) {
-            eprintln!("loam: telemetry spool write failed (event not lost from source, retry next run): {err}");
+            eprintln!("loam: telemetry event dropped (spool write failed, no retry yet): {err}");
         }
     }
 
@@ -139,5 +144,15 @@ mod tests {
             "{\"q\":\"x\"}".into(),
         ));
         assert_eq!(spool.count_kind("search_miss").unwrap(), 1);
+    }
+
+    #[test]
+    fn open_uses_wal() {
+        let (_d, spool) = temp_spool();
+        let mode: String = spool
+            .conn
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mode.to_lowercase(), "wal");
     }
 }

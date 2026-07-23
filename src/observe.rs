@@ -32,15 +32,6 @@ pub fn observe(
     }
     std::fs::create_dir_all(inbox_dir)?;
 
-    // Monotonic, collision-free sequence from existing entries.
-    let seq = std::fs::read_dir(inbox_dir)
-        .map(|it| {
-            it.filter_map(|e| e.ok())
-                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("json"))
-                .count()
-        })
-        .unwrap_or(0);
-
     let ts_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -55,9 +46,29 @@ pub fn observe(
         // untrusted: the pipeline re-derives evidence from source; this is a hint.
         "trusted": false,
     });
+    let bytes = serde_json::to_vec_pretty(&entry)?;
 
-    let path = inbox_dir.join(format!("{seq:06}-{kind}.json"));
-    std::fs::write(&path, serde_json::to_vec_pretty(&entry)?)?;
+    // Write to a fresh filename via create_new so a surviving entry is NEVER
+    // overwritten — even after the pipeline has drained some entries (the
+    // count-based scheme collided with survivors and fs::write clobbered them).
+    // ts_ms orders entries; the suffix disambiguates same-millisecond writes.
+    use std::io::Write;
+    let mut suffix = 0u32;
+    let path = loop {
+        let candidate = inbox_dir.join(format!("{ts_ms:013}-{kind}-{suffix}.json"));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(mut f) => {
+                f.write_all(&bytes)?;
+                break candidate;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => suffix += 1,
+            Err(e) => return Err(e.into()),
+        }
+    };
 
     if let Some(s) = spool {
         let payload = serde_json::json!({ "kind": kind }).to_string();
@@ -118,10 +129,29 @@ mod tests {
         )
         .unwrap();
         assert_eq!(spool.count_kind("observation_filed").unwrap(), 1);
-        // never writes a concept: only .json files exist under inbox, no .md anywhere
+        // never writes a concept: only .json under inbox, never a .md
         for e in std::fs::read_dir(&inbox).unwrap() {
             let p = e.unwrap().path();
             assert_ne!(p.extension().and_then(|x| x.to_str()), Some("md"));
         }
+    }
+
+    #[test]
+    fn survives_partial_drain_without_overwrite() {
+        let dir = tempfile::tempdir().unwrap();
+        let inbox = dir.path().join("inbox");
+        let a = observe(&inbox, "claim", "aaa", None, "t", "t").unwrap();
+        let b = observe(&inbox, "claim", "bbb", None, "t", "t").unwrap();
+        assert_ne!(a, b);
+        // pipeline drains 'a'
+        std::fs::remove_file(&a).unwrap();
+        // a new observation must not clobber the surviving 'b'
+        let c = observe(&inbox, "claim", "ccc", None, "t", "t").unwrap();
+        assert_ne!(b, c);
+        assert!(
+            std::fs::read_to_string(&b).unwrap().contains("bbb"),
+            "surviving entry b must be intact, not overwritten"
+        );
+        assert!(std::fs::read_to_string(&c).unwrap().contains("ccc"));
     }
 }

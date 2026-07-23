@@ -28,10 +28,13 @@ impl Anchor {
     }
 }
 
-/// sha256 (hex) of the inclusive 1-based line span, lines joined by '\n'.
-/// Mirrors the fixture-authoring computation exactly.
+/// sha256 (hex) of the inclusive 1-based line span. Canonical form (ADR-0008):
+/// CRLF/CR are normalized to LF before hashing, so the Python supply side
+/// (writer) and the Rust demand side (verifier) agree regardless of the source
+/// file's on-disk line endings. Lines are joined with '\n'.
 pub fn hash_span(text: &str, start: usize, end: usize) -> String {
-    let lines: Vec<&str> = text.split('\n').collect();
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let lines: Vec<&str> = normalized.split('\n').collect();
     let s = start.saturating_sub(1).min(lines.len());
     let e = end.min(lines.len());
     let span = if s <= e {
@@ -42,6 +45,13 @@ pub fn hash_span(text: &str, start: usize, end: usize) -> String {
     let mut h = Sha256::new();
     h.update(span.as_bytes());
     format!("{:x}", h.finalize())
+}
+
+/// A concept id must be a flat slug — no path separators or `..` traversal — so
+/// a crafted id (`loam get ../../x`) or a crafted link (`](../evil.md)`) cannot
+/// escape the bundle directory and serve an out-of-bundle file as in-bundle.
+pub fn is_valid_concept_id(id: &str) -> bool {
+    !id.is_empty() && !id.contains('/') && !id.contains('\\') && !id.contains("..")
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -122,5 +132,25 @@ mod tests {
         let c = parse_concept(&bundle().join("stale-example.md")).unwrap();
         let source_root = bundle().parent().unwrap().to_path_buf();
         assert!(!c.frontmatter.sources[0].is_fresh(&source_root));
+    }
+
+    #[test]
+    fn hash_is_line_ending_invariant() {
+        // CRLF and LF versions of the same span must hash identically (ADR-0008).
+        assert_eq!(
+            hash_span("a\r\nb\r\nc", 1, 2),
+            hash_span("a\nb\nc", 1, 2),
+            "CRLF must normalize to LF before hashing"
+        );
+    }
+
+    #[test]
+    fn concept_id_validation_rejects_traversal() {
+        assert!(is_valid_concept_id("greeting-contract"));
+        assert!(is_valid_concept_id("_index"));
+        assert!(!is_valid_concept_id("../evil"));
+        assert!(!is_valid_concept_id("a/b"));
+        assert!(!is_valid_concept_id("a\\b"));
+        assert!(!is_valid_concept_id(""));
     }
 }

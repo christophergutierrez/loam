@@ -41,6 +41,8 @@ wandb/
 # anchor index, telemetry spool, claim caches
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
 *.db
 .loam-cache/
 # loam-core local state: the inbox queue + any runtime state (not canonical)
