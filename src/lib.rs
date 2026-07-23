@@ -7,4 +7,5 @@
 pub mod bundle;
 pub mod concept;
 pub mod get;
+pub mod search;
 pub mod spool;

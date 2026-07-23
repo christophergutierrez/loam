@@ -4,6 +4,7 @@
 use clap::{Parser, Subcommand};
 use loam_core::bundle::resolve_bundle;
 use loam_core::get::{get, GetResult};
+use loam_core::search::{search, SearchHit};
 use loam_core::spool::Spool;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -22,6 +23,8 @@ struct Cli {
 enum Cmd {
     /// Retrieve a concept with read-time anchor verification.
     Get { concept: String },
+    /// Find concepts matching the given terms.
+    Search { terms: Vec<String> },
 }
 
 fn main() -> ExitCode {
@@ -53,6 +56,19 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Cmd::Search { terms } => {
+            let query = terms.join(" ");
+            match search(&bundle_dir, &query, spool.as_ref(), &harness, "cli") {
+                Ok(hits) => {
+                    print_search(&hits, cli.json);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("loam search: {e:#}");
+                    ExitCode::from(1)
+                }
+            }
+        }
     }
 }
 
@@ -72,6 +88,22 @@ fn open_spool(bundle_dir: &Path) -> Option<Spool> {
         Err(e) => {
             eprintln!("loam: telemetry spool unavailable ({e}); continuing");
             None
+        }
+    }
+}
+
+fn print_search(hits: &[SearchHit], json: bool) {
+    if json {
+        let v: Vec<_> = hits
+            .iter()
+            .map(|h| serde_json::json!({"concept_id": h.concept_id, "trust_tier": h.trust_tier}))
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&v).unwrap());
+    } else if hits.is_empty() {
+        println!("no matches");
+    } else {
+        for h in hits {
+            println!("[{}] {}", h.trust_tier, h.concept_id);
         }
     }
 }
