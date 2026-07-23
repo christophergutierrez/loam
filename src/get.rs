@@ -2,7 +2,7 @@
 //! (Consumption §4.2). Trust tier always surfaced; STALE flagged inline when an
 //! anchor no longer matches source; a `concept_read` event is spooled.
 
-use crate::concept::parse_concept;
+use crate::concept::{is_valid_concept_id, parse_concept};
 use crate::spool::{Event, Spool};
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -28,6 +28,9 @@ pub fn get(
     harness: &str,
     task: &str,
 ) -> Result<GetResult> {
+    if !is_valid_concept_id(concept_id) {
+        anyhow::bail!("invalid concept id '{concept_id}' (no path separators or '..')");
+    }
     let path = bundle_dir.join(format!("{concept_id}.md"));
     let concept = parse_concept(&path).with_context(|| format!("get: concept '{concept_id}'"))?;
     let source_root = bundle_dir.parent().unwrap_or(bundle_dir);
@@ -102,5 +105,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(spool.count_kind("concept_read").unwrap(), 1);
+    }
+
+    #[test]
+    fn rejects_path_traversal_concept_id() {
+        assert!(get(&bundle(), "../../etc/passwd", None, "test", "t").is_err());
+        assert!(get(&bundle(), "a/b", None, "test", "t").is_err());
     }
 }

@@ -15,6 +15,10 @@ pub struct SearchHit {
 /// Search the (flat) bundle for concepts matching all whitespace-separated
 /// terms in `query` (case-insensitive, over concept_id + body). Emits a
 /// `search_miss` event when nothing matches.
+// TODO(anchor-index): this full-scans and parses every concept on each call —
+// fine at fixture scale, wrong at census scale. The derived anchor index
+// (Supply §4) is the spec'd successor. This is placeholder-with-a-known-
+// successor, not a design decision.
 pub fn search(
     bundle_dir: &Path,
     query: &str,
