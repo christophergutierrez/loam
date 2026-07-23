@@ -1,6 +1,6 @@
 # Loam — Repo Instructions
 
-Loam is a knowledge store + local extraction/verification pipeline for AI agents, running on **sunk-cost owned hardware reached through an endpoint abstraction** (reference config, not a requirement — e.g. a DGX Spark/GB10, H200s, or a large Mac; ADR-0005). The write path is the product: knowledge is admitted only through a verification gate with a measured error rate. Currently docs-only; P0 (the model-floor experiment) gates all building.
+Loam is a knowledge store + local extraction/verification pipeline for AI agents, running on **sunk-cost owned hardware reached through an endpoint abstraction** (reference config, not a requirement — e.g. a DGX Spark/GB10, H200s, or a large Mac; ADR-0005). The write path is the product: knowledge is admitted only through a verification gate with a measured error rate. P0 (the model-floor experiment) gates all building — **except** the demand-side `loam-core` CLI, whose early build against a fixture bundle is a deliberate, recorded override (ADR-0007).
 
 ## Read first
 
