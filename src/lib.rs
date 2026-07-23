@@ -8,5 +8,6 @@ pub mod assemble;
 pub mod bundle;
 pub mod concept;
 pub mod get;
+pub mod observe;
 pub mod search;
 pub mod spool;

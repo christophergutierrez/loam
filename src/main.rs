@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 use loam_core::assemble::{assemble, AssembledBundle};
 use loam_core::bundle::resolve_bundle;
 use loam_core::get::{get, GetResult};
+use loam_core::observe::observe;
 use loam_core::search::{search, SearchHit};
 use loam_core::spool::Spool;
 use std::path::{Path, PathBuf};
@@ -32,6 +33,12 @@ enum Cmd {
         /// Max concepts to include (size cap).
         #[arg(long, default_value_t = 16)]
         max: usize,
+    },
+    /// File a typed observation into the inbox (never writes a concept).
+    Observe {
+        /// One of: claim, contradiction, concept-wrong, concept-missing, procedural.
+        kind: String,
+        text: Vec<String>,
     },
 }
 
@@ -90,7 +97,37 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Cmd::Observe { kind, text } => {
+            let inbox = inbox_dir(&bundle_dir);
+            let body = text.join(" ");
+            match observe(&inbox, &kind, &body, spool.as_ref(), &harness, "cli") {
+                Ok(p) => {
+                    if cli.json {
+                        println!("{}", serde_json::json!({"filed": p.to_string_lossy()}));
+                    } else {
+                        println!("observation filed: {}", p.display());
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("loam observe: {e:#}");
+                    ExitCode::from(1)
+                }
+            }
+        }
     }
+}
+
+/// Inbox location: `LOAM_INBOX` override, else `<repo>/.loam/inbox`.
+fn inbox_dir(bundle_dir: &Path) -> PathBuf {
+    std::env::var_os("LOAM_INBOX")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            bundle_dir
+                .parent()
+                .unwrap_or(bundle_dir)
+                .join(".loam/inbox")
+        })
 }
 
 /// Open the local spool. Path override via `LOAM_SPOOL`, else the bundle's

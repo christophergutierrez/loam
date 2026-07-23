@@ -50,6 +50,35 @@ fn cli_get_json_flags_stale() {
 }
 
 #[test]
+fn cli_observe_files_one_json_entry_no_concept() {
+    let bin = env!("CARGO_BIN_EXE_loam");
+    let inbox = std::env::temp_dir().join(format!("loam-inbox-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&inbox);
+    let out = Command::new(bin)
+        .args(["observe", "contradiction", "doc says X, code does Y"])
+        .current_dir(fixture("src/deep"))
+        .env("LOAM_INBOX", &inbox)
+        .env("LOAM_SPOOL", std::env::temp_dir().join("loam-cli-obs.sqlite"))
+        .output()
+        .expect("run loam");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let entries: Vec<_> = std::fs::read_dir(&inbox)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    assert_eq!(entries.len(), 1, "one inbox entry expected");
+    assert_eq!(
+        entries[0].extension().and_then(|x| x.to_str()),
+        Some("json"),
+        "inbox entry must be json, never a concept .md"
+    );
+}
+
+#[test]
 fn cli_errors_when_no_bundle() {
     let bin = env!("CARGO_BIN_EXE_loam");
     let out = Command::new(bin)
