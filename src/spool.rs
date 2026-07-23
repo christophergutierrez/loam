@@ -93,11 +93,11 @@ impl Spool {
 
     /// Count spooled events of a given kind (test/health support).
     pub fn count_kind(&self, kind: &str) -> Result<i64> {
-        Ok(self.conn.query_row(
-            "SELECT COUNT(*) FROM events WHERE kind = ?1",
-            [kind],
-            |r| r.get(0),
-        )?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM events WHERE kind = ?1", [kind], |r| {
+                r.get(0)
+            })?)
     }
 }
 
@@ -116,7 +116,13 @@ mod tests {
         let (_d, spool) = temp_spool();
         assert_eq!(spool.count().unwrap(), 0);
         spool
-            .emit(&Event::now("concept_read", "claude-code", "t1", "b1", "{}".into()))
+            .emit(&Event::now(
+                "concept_read",
+                "claude-code",
+                "t1",
+                "b1",
+                "{}".into(),
+            ))
             .unwrap();
         assert_eq!(spool.count().unwrap(), 1);
         assert_eq!(spool.count_kind("concept_read").unwrap(), 1);
@@ -125,7 +131,13 @@ mod tests {
     #[test]
     fn best_effort_never_panics_and_persists() {
         let (_d, spool) = temp_spool();
-        spool.emit_best_effort(&Event::now("search_miss", "hermes", "t2", "b1", "{\"q\":\"x\"}".into()));
+        spool.emit_best_effort(&Event::now(
+            "search_miss",
+            "hermes",
+            "t2",
+            "b1",
+            "{\"q\":\"x\"}".into(),
+        ));
         assert_eq!(spool.count_kind("search_miss").unwrap(), 1);
     }
 }

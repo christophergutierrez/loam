@@ -29,8 +29,7 @@ pub fn get(
     task: &str,
 ) -> Result<GetResult> {
     let path = bundle_dir.join(format!("{concept_id}.md"));
-    let concept =
-        parse_concept(&path).with_context(|| format!("get: concept '{concept_id}'"))?;
+    let concept = parse_concept(&path).with_context(|| format!("get: concept '{concept_id}'"))?;
     let source_root = bundle_dir.parent().unwrap_or(bundle_dir);
 
     let mut changed_anchors = Vec::new();
@@ -94,7 +93,14 @@ mod tests {
     fn emits_concept_read_event() {
         let dir = tempfile::tempdir().unwrap();
         let spool = Spool::open(&dir.path().join("spool.sqlite")).unwrap();
-        get(&bundle(), "greeting-contract", Some(&spool), "claude-code", "t").unwrap();
+        get(
+            &bundle(),
+            "greeting-contract",
+            Some(&spool),
+            "claude-code",
+            "t",
+        )
+        .unwrap();
         assert_eq!(spool.count_kind("concept_read").unwrap(), 1);
     }
 }

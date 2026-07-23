@@ -35,8 +35,7 @@ pub fn search(
             Ok(c) => c,
             Err(_) => continue, // not a well-formed concept; skip
         };
-        let hay =
-            format!("{} {}", concept.frontmatter.concept_id, concept.body).to_lowercase();
+        let hay = format!("{} {}", concept.frontmatter.concept_id, concept.body).to_lowercase();
         if !terms.is_empty() && terms.iter().all(|t| hay.contains(t)) {
             hits.push(SearchHit {
                 concept_id: concept.frontmatter.concept_id,

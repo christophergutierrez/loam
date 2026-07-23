@@ -50,8 +50,7 @@ pub fn assemble(
 ) -> Result<AssembledBundle> {
     // Seed with search hits; fall back to the bundle-root index concept.
     let seeds = search(bundle_dir, task, None, harness, task_id)?;
-    let mut queue: VecDeque<String> =
-        seeds.into_iter().map(|h| h.concept_id).collect();
+    let mut queue: VecDeque<String> = seeds.into_iter().map(|h| h.concept_id).collect();
     if queue.is_empty() {
         queue.push_back("_index".to_string());
     }
@@ -122,8 +121,14 @@ mod tests {
     fn assembles_seed_and_linked_concepts() {
         let b = assemble(&bundle(), "greet", 16, None, "test", "t").unwrap();
         let got = ids(&b);
-        assert!(got.contains(&"greeting-contract".to_string()), "seed missing: {got:?}");
-        assert!(got.contains(&"_index".to_string()), "linked _index missing: {got:?}");
+        assert!(
+            got.contains(&"greeting-contract".to_string()),
+            "seed missing: {got:?}"
+        );
+        assert!(
+            got.contains(&"_index".to_string()),
+            "linked _index missing: {got:?}"
+        );
     }
 
     #[test]

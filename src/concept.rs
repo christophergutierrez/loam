@@ -34,7 +34,11 @@ pub fn hash_span(text: &str, start: usize, end: usize) -> String {
     let lines: Vec<&str> = text.split('\n').collect();
     let s = start.saturating_sub(1).min(lines.len());
     let e = end.min(lines.len());
-    let span = if s <= e { lines[s..e].join("\n") } else { String::new() };
+    let span = if s <= e {
+        lines[s..e].join("\n")
+    } else {
+        String::new()
+    };
     let mut h = Sha256::new();
     h.update(span.as_bytes());
     format!("{:x}", h.finalize())
@@ -65,8 +69,8 @@ pub fn parse_concept(path: &Path) -> Result<Concept> {
         .with_context(|| format!("reading concept {}", path.display()))?;
     let (fm, body) = split_frontmatter(&text)
         .with_context(|| format!("parsing frontmatter of {}", path.display()))?;
-    let frontmatter: Frontmatter =
-        serde_yaml::from_str(fm).with_context(|| format!("frontmatter yaml of {}", path.display()))?;
+    let frontmatter: Frontmatter = serde_yaml::from_str(fm)
+        .with_context(|| format!("frontmatter yaml of {}", path.display()))?;
     Ok(Concept {
         frontmatter,
         body: body.trim_start().to_string(),

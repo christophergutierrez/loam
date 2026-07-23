@@ -43,6 +43,8 @@ wandb/
 *.sqlite3
 *.db
 .loam-cache/
+# loam-core local state: the inbox queue + any runtime state (not canonical)
+.loam/
 
 # --- P0 experiment: manifests, labels, and models.lock ARE committed; raw model output is not ---
 p0/raw/

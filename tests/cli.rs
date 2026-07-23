@@ -46,7 +46,10 @@ fn cli_get_json_flags_stale() {
     assert!(out.status.success());
     let s = String::from_utf8_lossy(&out.stdout);
     assert!(s.contains("\"stale\": true"), "expected stale=true in: {s}");
-    assert!(s.contains("src/greeting.rs"), "expected changed anchor in: {s}");
+    assert!(
+        s.contains("src/greeting.rs"),
+        "expected changed anchor in: {s}"
+    );
 }
 
 #[test]
@@ -58,7 +61,10 @@ fn cli_observe_files_one_json_entry_no_concept() {
         .args(["observe", "contradiction", "doc says X, code does Y"])
         .current_dir(fixture("src/deep"))
         .env("LOAM_INBOX", &inbox)
-        .env("LOAM_SPOOL", std::env::temp_dir().join("loam-cli-obs.sqlite"))
+        .env(
+            "LOAM_SPOOL",
+            std::env::temp_dir().join("loam-cli-obs.sqlite"),
+        )
         .output()
         .expect("run loam");
     assert!(
@@ -84,7 +90,10 @@ fn cli_errors_when_no_bundle() {
     let out = Command::new(bin)
         .args(["get", "whatever"])
         .current_dir(std::env::temp_dir())
-        .env("LOAM_SPOOL", std::env::temp_dir().join("loam-cli-test-c.sqlite"))
+        .env(
+            "LOAM_SPOOL",
+            std::env::temp_dir().join("loam-cli-test-c.sqlite"),
+        )
         .output()
         .expect("run loam");
     assert!(!out.status.success(), "should fail with no bundle");

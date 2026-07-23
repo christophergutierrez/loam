@@ -36,9 +36,7 @@ pub fn observe(
     let seq = std::fs::read_dir(inbox_dir)
         .map(|it| {
             it.filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.path().extension().and_then(|x| x.to_str()) == Some("json")
-                })
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("json"))
                 .count()
         })
         .unwrap_or(0);
@@ -82,8 +80,15 @@ mod tests {
     fn writes_a_typed_inbox_entry_as_json() {
         let dir = tempfile::tempdir().unwrap();
         let inbox = dir.path().join("inbox");
-        let p = observe(&inbox, "contradiction", "doc says X, code does Y", None, "test", "t")
-            .unwrap();
+        let p = observe(
+            &inbox,
+            "contradiction",
+            "doc says X, code does Y",
+            None,
+            "test",
+            "t",
+        )
+        .unwrap();
         assert!(p.starts_with(&inbox), "entry must be under inbox: {p:?}");
         assert_eq!(p.extension().and_then(|e| e.to_str()), Some("json"));
         let content = std::fs::read_to_string(&p).unwrap();
@@ -103,8 +108,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let inbox = dir.path().join("inbox");
         let spool = Spool::open(&dir.path().join("spool.sqlite")).unwrap();
-        observe(&inbox, "claim", "greet also trims whitespace", Some(&spool), "hermes", "t")
-            .unwrap();
+        observe(
+            &inbox,
+            "claim",
+            "greet also trims whitespace",
+            Some(&spool),
+            "hermes",
+            "t",
+        )
+        .unwrap();
         assert_eq!(spool.count_kind("observation_filed").unwrap(), 1);
         // never writes a concept: only .json files exist under inbox, no .md anywhere
         for e in std::fs::read_dir(&inbox).unwrap() {

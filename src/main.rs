@@ -12,7 +12,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 #[derive(Parser)]
-#[command(name = "loam", version, about = "Loam demand-side CLI (loam-core, ADR-0006)")]
+#[command(
+    name = "loam",
+    version,
+    about = "Loam demand-side CLI (loam-core, ADR-0006)"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -59,18 +63,16 @@ fn main() -> ExitCode {
     let harness = std::env::var("LOAM_HARNESS").unwrap_or_else(|_| "unknown".into());
 
     match cli.cmd {
-        Cmd::Get { concept } => {
-            match get(&bundle_dir, &concept, spool.as_ref(), &harness, "cli") {
-                Ok(r) => {
-                    print_get(&r, cli.json);
-                    ExitCode::SUCCESS
-                }
-                Err(e) => {
-                    eprintln!("loam get: {e:#}");
-                    ExitCode::from(1)
-                }
+        Cmd::Get { concept } => match get(&bundle_dir, &concept, spool.as_ref(), &harness, "cli") {
+            Ok(r) => {
+                print_get(&r, cli.json);
+                ExitCode::SUCCESS
             }
-        }
+            Err(e) => {
+                eprintln!("loam get: {e:#}");
+                ExitCode::from(1)
+            }
+        },
         Cmd::Search { terms } => {
             let query = terms.join(" ");
             match search(&bundle_dir, &query, spool.as_ref(), &harness, "cli") {
