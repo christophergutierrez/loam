@@ -15,7 +15,7 @@
 
 Loam's supply side (Supply PRD) builds a knowledge store whose admission gate bounds error rates. That store is worthless if agents don't consult it, and dangerous if agents can write to it around the gate. The consumption problem has one constraint that shapes every decision here: **the consumers are heterogeneous and not ours.** Work happens in Claude Code, Codex, Grok Build, Antigravity, Hermes, and whatever ships next quarter — different tool models, different instruction conventions, different context disciplines. A bespoke integration per harness is unmaintainable; the integration surface must be tiered by universality, instrumented for compliance measurement, and strictly read-only with respect to the store's admission gate.
 
-The second half of the problem is the feedback loop. Consumption telemetry is the sensor layer the supply-side design assumed but did not implement: use-time trust promotion/demotion (Supply §7.4), demand-driven extraction (Supply §3), heat-based criticality, and live token economics all require knowing when, how, and for what agents used the store. That telemetry is **emitted to TraceStore, which remains a separate product** — Loam produces events; TraceStore records them; the pipeline queries them. No recording system is built here.
+The second half of the problem is the feedback loop. Consumption telemetry is the sensor layer the supply-side design assumed but did not implement: use-time trust promotion/demotion (Supply §7.4), demand-driven extraction (Supply §3), heat-based criticality, and live token economics all require knowing when, how, and for what agents used the store. That telemetry is **emitted to a downstream telemetry consumer, which remains a separate product** — Loam produces events; the consumer records them; the pipeline queries them. No recording system is built here.
 
 ## 2. Goals and Non-Goals
 
@@ -29,7 +29,7 @@ The second half of the problem is the feedback loop. Consumption telemetry is th
 
 **Non-Goals (v1)**
 
-- Building a telemetry store (TraceStore's job; Loam emits, full stop).
+- Building a telemetry store (the downstream consumer's job; Loam emits, full stop).
 - Retrieval ranking / vector search in `bundle` (dumb-first; the telemetry earns the ranking layer, see §5.3).
 - MCP server (deferred, data-gated; see §3 Tier C).
 - Blocking enforcement of lint (advisory only in v1; CI/CD enforcement is explicit future scope, §8.6).
@@ -93,15 +93,15 @@ The inbox accepts `procedural` observations ("this build command is the one that
 
 ## 7. Telemetry and Feedback Loops
 
-### 7.1 Event schema (emitted; stored by TraceStore)
+### 7.1 Event schema (emitted; stored by the downstream telemetry consumer)
 
-Minimum event types, each carrying harness ID, task ID, bundle ID, timestamp: `concept_read` (+ trust tier, stale flag), `search_miss` (+ query shape), `bundle_assembled` (+ composition), `post_bundle_exploration` (agent grepped/read source after consuming a bundle — inferable from trace adjacency), `observation_filed` (+ type), `lint_shown` / `lint_outcome` (§8.5), `task_outcome` (join key to TraceStore's existing three-tier outcome signals).
+Minimum event types, each carrying harness ID, task ID, bundle ID, timestamp: `concept_read` (+ trust tier, stale flag), `search_miss` (+ query shape), `bundle_assembled` (+ composition), `post_bundle_exploration` (agent grepped/read source after consuming a bundle — inferable from trace adjacency), `observation_filed` (+ type), `lint_shown` / `lint_outcome` (§8.5), `task_outcome` (join key to the consumer's existing three-tier outcome signals).
 
-**Durability (decided, not deferred).** Events append to a local SQLite spool and flush to TraceStore asynchronously. Emission never blocks or fails a CLI command, and undelivered events are never silently dropped — the spool persists until acknowledged flush, and spool depth/age is itself a health metric. A CLI that hangs when TraceStore is down gets uninstalled; a CLI that silently drops events corrupts every feedback loop in §7.2. Spool-only operation (no TraceStore reachable) is a supported degraded mode, which also lets Consumption P0 proceed before the TraceStore intake surface (Supply §16.4) is settled. **v1 depends on TraceStore for nothing (ADR-0002): the feedback loops in §7.2 are P1+ *amplifiers*, dark until TraceStore consumes the spool, and their v1 absence is an accepted degradation (static-only criticality, benchmark-only economics, hash-only staleness) — not a blocker.**
+**Durability (decided, not deferred).** Events append to a local SQLite spool and flush to the downstream telemetry consumer asynchronously. Emission never blocks or fails a CLI command, and undelivered events are never silently dropped — the spool persists until acknowledged flush, and spool depth/age is itself a health metric. A CLI that hangs when the consumer is down gets uninstalled; a CLI that silently drops events corrupts every feedback loop in §7.2. Spool-only operation (no downstream consumer reachable) is a supported degraded mode, which also lets Consumption P0 proceed before the intake surface (Supply §16.4) is settled. **v1 depends on no external telemetry consumer (ADR-0002): the feedback loops in §7.2 are P1+ *amplifiers*, dark until a downstream consumer drains the spool, and their v1 absence is an accepted degradation (static-only criticality, benchmark-only economics, hash-only staleness) — not a blocker.**
 
 ### 7.2 The feedback loop family
 
-Each loop is a distinct mechanism the supply side consumes; enumerated so each gets built and monitored deliberately. **All five are P1+ amplifiers (ADR-0002): they light up when TraceStore consumes the spool, and v1 depends on none of them.**
+Each loop is a distinct mechanism the supply side consumes; enumerated so each gets built and monitored deliberately. **All five are P1+ amplifiers (ADR-0002): they light up when a downstream consumer drains the spool, and v1 depends on none of them.**
 
 1. **Heat → criticality promotion.** Read frequency measures *exposure-if-wrong*: a bad fact in a hot concept damages many tasks. Heat therefore legitimately raises criticality scores, moving hot concepts (and their source files) toward the census stratum — including files not yet on any hand-maintained critical list. This is principled, not a heuristic.
 2. **Miss → extraction demand.** `search_miss` is the concrete sensor for Supply §3's demand-driven processing. Repeated misses with a common query shape also reveal **ontology gaps** — a claim *type* the extractor doesn't produce yet — which feed Supply §16.3.
@@ -147,15 +147,15 @@ With the linter in place, every writer faces the same falsification discipline a
 
 1. **Consultation**: ≥70% of agent sessions on ingested corpora consult Loam before source exploration, per harness, after instruction iteration. Persistent failure means the integration model is wrong, not merely the stanzas.
 2. **Usefulness**: bundle fallback rate — ≤30% of consumed bundles followed by immediate fallback exploration for the same question (loop §7.2.3). Persistent failure means extraction ontology or bundling is missing what agents actually need.
-3. **Live economics**: outcome-joined token delta (loop §7.2.4) sustains the ≥30% reduction of Supply kill criterion 2 on real work, not just benchmarks. **This is the *continuous* form and is P1+ (ADR-0002); the one-time proof is the TraceStore-independent P0 paired-run benchmark, whose target is sanity-checked against the measured rediscovery ceiling (ADR-0003).**
+3. **Live economics**: outcome-joined token delta (loop §7.2.4) sustains the ≥30% reduction of Supply kill criterion 2 on real work, not just benchmarks. **This is the *continuous* form and is P1+ (ADR-0002); the one-time proof is the P0 paired-run benchmark, independent of any external telemetry consumer, whose target is sanity-checked against the measured rediscovery ceiling (ADR-0003).**
 4. **Lint precision**: ≥60% of semantic-tier lint warnings result in an action (fix or filed observation) rather than ignore. Below that, the linter is noise and gets demoted to manual-only until fixed.
 
 **Health metrics:** consultation rate per harness; miss rate and miss-query clustering; stale-read frequency; inbox volume by type and by harness; lint disposition distribution; read-then-grep rate by trust tier; heat-promotion queue size.
 
 ## 10. Phasing
 
-- **P0 — Files + CLI core.** Bundle index conventions; `loam-core` library; `get` (with live anchor check), `search`, dumb-first `bundle` (§5.3 — it is the headline instruction of every stanza, so it ships with the stanzas, and the consultation baseline is measured against the real surface from day one), `observe` (inbox write); corpus resolution; telemetry emission to the local spool, flushing to TraceStore event intake when available (§7.1 durability). Instruction stanzas for Claude Code and Hermes.
-- **P1 — Loops.** Miss/heat/outcome loop consumers in the supply-side pipeline; consultation-rate dashboards; remaining harness stanzas. (These are the ADR-0002 amplifiers; they require TraceStore consuming the P0 spool.)
+- **P0 — Files + CLI core.** Bundle index conventions; `loam-core` library; `get` (with live anchor check), `search`, dumb-first `bundle` (§5.3 — it is the headline instruction of every stanza, so it ships with the stanzas, and the consultation baseline is measured against the real surface from day one), `observe` (inbox write); corpus resolution; telemetry emission to the local spool, flushing to the downstream consumer's event intake when available (§7.1 durability). Instruction stanzas for Claude Code and Hermes.
+- **P1 — Loops.** Miss/heat/outcome loop consumers in the supply-side pipeline; consultation-rate dashboards; remaining harness stanzas. (These are the ADR-0002 amplifiers; they require a downstream consumer draining the P0 spool.)
 - **P2 — Lint.** Mechanical tier; semantic tier via falsifier adapter; three-exit UX; advisory hook; disposition telemetry.
 - **P3 — Data-gated extensions.** MCP wrapper for low-compliance harnesses (if any); ranking layer for `bundle` (if §9.2 demands it); procedural-queue handoff to skill distillation; CI/CD lint pilot.
 
@@ -171,6 +171,6 @@ With the linter in place, every writer faces the same falsification discipline a
 
 1. Bundle size cap default and per-harness overrides (context budgets differ wildly across harnesses).
 2. Inbox rate limiting / dedup per harness (a confused agent filing 400 identical observations should cost one re-verification, not 400).
-3. `post_bundle_exploration` inference: derived from TraceStore trace adjacency or explicitly signaled by well-behaved harnesses? (Probably both, with adjacency as the floor.)
+3. `post_bundle_exploration` inference: derived from the downstream consumer's trace adjacency or explicitly signaled by well-behaved harnesses? (Probably both, with adjacency as the floor.)
 4. Whether `lint` semantic tier requires the workhorse resident (GB10 up) or degrades gracefully to mechanical-only when the box is busy with a pipeline phase.
 5. Stanza versioning: how instruction blocks in many repos stay current as the CLI evolves (likely: stanzas are generated artifacts, `loam init --refresh`).

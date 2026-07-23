@@ -33,7 +33,7 @@
 - **O8** — KC2's ≥30% target sanity-checked against the measured ceiling before any treatment arm.
 - **O9** — a P0 Results memo carrying the explicit, evidence-cited gate decision.
 
-**Non-goals:** the `loam-core` CLI / any command; the bundle *write* path; TraceStore intake/flush; any QLoRA adapter (P0 is generation-0 stock); the KC2 *treatment* arm; all P1–P3 loops. Post-gate and speculative to detail now.
+**Non-goals:** the `loam-core` CLI / any command; the bundle *write* path; downstream consumer intake/flush; any QLoRA adapter (P0 is generation-0 stock); the KC2 *treatment* arm; all P1–P3 loops. Post-gate and speculative to detail now.
 
 ## Facts, Assumptions, and Decisions
 - **Facts (cited above):** greenfield; Python for P0; spec in docs/.

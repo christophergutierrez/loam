@@ -45,7 +45,7 @@ These four pairs are the ones that have already caused (or nearly caused) drift.
 - **Weakness registry.** The live list of open failure predicates, consulted by S0 triage to route matching files to heavier extraction until cleared.
 - **Unexplained bucket.** Failures that refuse to cluster under current coordinates. Its growth rate is the feature-space-debt health metric.
 - **Feature-space debt.** Accumulated evidence that error clusters exist in coordinates the system cannot yet see.
-- **Seeded mutation.** A known-bad claim injected into falsification batches to measure live gate recall (Killhouse pattern). Falsifiers are scored on kills against seeded ground truth, never on agreement.
+- **Seeded mutation.** A known-bad claim injected into falsification batches to measure live gate recall. Falsifiers are scored on kills against seeded ground truth, never on agreement.
 - **Conditional miss rate.** Of mutations the extractor plausibly produces, the fraction a given falsifier misses — measured separately for same-base vs. anchor to quantify the correlation penalty.
 
 ## Consumption
@@ -59,9 +59,10 @@ These four pairs are the ones that have already caused (or nearly caused) drift.
 - **Read-then-grep.** An agent consults a concept, then verifies against source anyway. Expected for `claimed`; a gap or distrust signal for `verified`.
 - **Rediscovery share (discovery/execution split).** The fraction of baseline task tokens spent on *discovery* (grep/read/model-building) vs. *execution* (edits/tests/builds). It is the **ceiling** on achievable savings — distinct from KC2's *achieved* reduction. Measured at tool-call-class granularity with a conservative/liberal band (reported as an interval, not a point). A P0 baseline-arm primary readout (ADR-0003); the founding "60–80%" figure is the hypothesis this measures, not an asserted fact.
 - **Miss event.** A zero-result `loam search` — the concrete sensor for demand-driven extraction; clustered miss shapes reveal ontology gaps.
-- **Telemetry spool.** Local append-only SQLite queue for telemetry events; async flush to TraceStore; never blocks a command, never silently drops. Spool-only operation is a supported degraded mode.
+- **Telemetry spool.** Local append-only SQLite queue for telemetry events; async flush to a downstream telemetry consumer; never blocks a command, never silently drops. Spool-only operation is a supported degraded mode.
 - **Stanza.** The per-harness instruction block (CLAUDE.md / AGENTS.md / Skill) shipped with the bundle; a generated artifact, refreshed by `loam init --refresh`.
-- **Heat.** TraceStore-derived read frequency. Measures exposure-if-wrong; legitimately promotes criticality up to census. A **P1+ amplifier** (ADR-0002): v1 depends on it for nothing — without heat, criticality degrades to static-only (S0 heuristics), and in census regime heat is irrelevant anyway.
+- **Downstream telemetry consumer.** The separate, external system of record that drains the telemetry spool and serves agent traces plus Loam events back for querying. Loam emits; the consumer records; the pipeline queries. Named generically because it is out-of-repo and swappable — v1 depends on none of what it powers (ADR-0002).
+- **Heat.** Read frequency reported by the downstream telemetry consumer. Measures exposure-if-wrong; legitimately promotes criticality up to census. A **P1+ amplifier** (ADR-0002): v1 depends on it for nothing — without heat, criticality degrades to static-only (S0 heuristics), and in census regime heat is irrelevant anyway.
 
 ## Models and hardware
 

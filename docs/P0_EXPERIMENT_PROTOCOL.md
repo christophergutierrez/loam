@@ -24,14 +24,14 @@ Everything here is sized so the experiment is one to two weeks of part-time work
 
 The two PRDs' P0 phases interleave. Binding order:
 
-1. **This protocol executes first.** Needs: the labeled sample (§4), the mechanical verification harness (Supply P0), stock T1/T2 models serving on the GB10. Needs **no** consumption layer, **no** TraceStore intake.
+1. **This protocol executes first.** Needs: the labeled sample (§4), the mechanical verification harness (Supply P0), stock T1/T2 models serving on the GB10. Needs **no** consumption layer, **no** downstream telemetry consumer intake.
 2. **Kill criterion 2, baseline arm** runs in parallel with step 1: pre-Loam token counts on the matched task set (§7). Requires only the existing paired-run harness — no wiki exists yet, which is the point.
 3. **Gate decision** on kill criterion 1. Nothing below this line starts until it passes.
 4. **Supply P0 remainder**: OKF bundle schema finalized, stock-pipeline run over the pilot repo → a real bundle exists.
-5. **Consumption P0**: `loam-core`, `get`/`search`/`bundle`/`observe`, corpus resolution, stanzas. Telemetry runs **spool-only** (Consumption §7.1 durability) — the TraceStore intake surface (Supply §16.4) is *not* a P0 blocker; flush lands when the intake contract does.
+5. **Consumption P0**: `loam-core`, `get`/`search`/`bundle`/`observe`, corpus resolution, stanzas. Telemetry runs **spool-only** (Consumption §7.1 durability) — the downstream telemetry consumer's intake surface (Supply §16.4) is *not* a P0 blocker; flush lands when the intake contract does.
 6. **Kill criterion 2, treatment arm**: paired runs against the live bundle via the real CLI. Baseline (step 2) vs. treatment (this step) closes the token-economics measurement.
 
-The one genuinely external dependency is the **Telemetry Event Contract** (Loam↔TraceStore boundary). It blocks *flushing*, not P0 progress; drafting it belongs to whoever touches TraceStore next.
+The one genuinely external dependency is the **Telemetry Event Contract** (the boundary between Loam and its downstream telemetry consumer). It blocks *flushing*, not P0 progress; drafting it belongs to whoever owns that integration next.
 
 ## 3. Pilot corpus and sample frame
 

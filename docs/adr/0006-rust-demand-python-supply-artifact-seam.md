@@ -9,7 +9,7 @@ The two sides are **distinct and never share a process or in-memory API.** They 
 - the git-resident **OKF markdown bundle** — canonical, the contract between supply and demand;
 - the derived **SQLite anchor index** — rebuildable, read by `loam-core`, rebuilt by the pipeline (never a source of truth, per non-negotiable 8);
 - the **inbox** queue — `loam observe` writes it; the pipeline drains it;
-- the **telemetry spool** — `loam-core` writes it; TraceStore (P1+) drains it.
+- the **telemetry spool** — `loam-core` writes it; a downstream telemetry consumer (P1+) drains it.
 
 `loam-core` *reads* the bundle + index and *writes* the inbox + spool; the pipeline *writes* the bundle + rebuilds the index and *reads* the inbox. Neither calls the other's code.
 

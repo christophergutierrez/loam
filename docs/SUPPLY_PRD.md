@@ -23,7 +23,7 @@ Loam is a knowledge store plus an extraction/verification pipeline whose central
 
 - Google's Open Knowledge Format (OKF v0.1, published June 12, 2026) formalized the LLM-wiki pattern (markdown + YAML frontmatter, explicit links) into a portable standard, giving Loam a storage layer that is agent-native, greppable, diffable, and git-resident.
 - Sparse-MoE open models (e.g. Qwen3.6-35B-A3B, GPT-OSS-120B, Nemotron 3 Nano) fit the bandwidth-bound decode profile of sunk-cost boxes, making exhaustive multi-pass extraction feasible on owned hardware. Model names are examples; tiers are defined by required properties and P0 selects the checkpoints (§5, ADR-0005).
-- Existing in-house components slot in directly: TraceStore (provenance, content-addressed blobs, demand signals), Killhouse (falsifiable gates, seeded-mutation audits), the skill evaluation framework (paired-run token benchmarking), and the Amesh LoRA training pipeline (weight-baking distillation target).
+- Adjacent, independently-owned capabilities slot in directly: a downstream telemetry consumer (provenance, content-addressed blobs, demand signals), the falsifiable-gate and seeded-mutation audit patterns used throughout this design, a skill-evaluation mechanism (paired-run token benchmarking) for procedural-knowledge graduation, and a LoRA weight-baking pipeline as the eventual distillation target.
 
 ## 2. Goals and Non-Goals
 
@@ -44,9 +44,9 @@ Loam is a knowledge store plus an extraction/verification pipeline whose central
 
 ## 3. Corpus and Prioritization
 
-**Corpus definition.** "Anything that helps an agent do better work": source code, configs, schemas, internal docs, design notes, and (P2, §15) TraceStore traces. The corpus is unbounded by intent, therefore **prioritization is a first-class design axis**, not an optimization.
+**Corpus definition.** "Anything that helps an agent do better work": source code, configs, schemas, internal docs, design notes, and (P2, §15) traces from the downstream telemetry consumer. The corpus is unbounded by intent, therefore **prioritization is a first-class design axis**, not an optimization.
 
-**Demand-driven processing.** First agent contact queues a file for deep extraction in the next batch pass — contact raises priority; it does not create a real-time latency guarantee (see §2 non-goals) — and files are gardened in the background thereafter. Exhaustive crawling is reserved for explicitly onboarded corpora. TraceStore access frequency is the canonical heat signal: process the hot set deeply; leave the cold set as raw source until touched.
+**Demand-driven processing.** First agent contact queues a file for deep extraction in the next batch pass — contact raises priority; it does not create a real-time latency guarantee (see §2 non-goals) — and files are gardened in the background thereafter. Exhaustive crawling is reserved for explicitly onboarded corpora. Access frequency reported by the downstream telemetry consumer is the canonical heat signal: process the hot set deeply; leave the cold set as raw source until touched.
 
 **Onboarding a corpus** = one full cold-start pipeline run (§6). Steady state = the identical pipeline run on the content-hash dirty set. One pipeline, two corpus sizes.
 
@@ -139,7 +139,7 @@ Every claim admitted to the store satisfies:
    - **Detection is deterministic and runs at S1 (extraction), before claims are cached**: gitleaks/trufflehog-class rule packs plus entropy heuristics, zero LLM. S4 write-time redaction alone is insufficient — intermediate caches leak too.
    - **Replacement is declarative, never a mask or plausible default.** Masks (`AKIAXXXX…`) and fake defaults still match secret-scanner regexes, turning the wiki into a permanent DLP false-positive source. Instead a structured token with no exploitable format: `{{loam:secret type=aws_access_key_id rule=v3.2 ref=r-7f3a}}`. This preserves the legitimate knowledge ("an AWS key is configured here") while storing nothing of the value.
    - **Registry, not values.** Each redaction logs type, location, and rule version to a registry for audit. Nothing derived from the secret value is stored — not even hashes (hashes of low-entropy secrets are crackable).
-   - **Versioned rules with re-redaction sweeps** on rule updates (TraceStore versioned-redaction pattern), so improved detectors retroactively clean earlier extractions.
+   - **Versioned rules with re-redaction sweeps** on rule updates, so improved detectors retroactively clean earlier extractions.
 
 ## 8. Sampling Design (Falsification Budget Allocation)
 
@@ -193,7 +193,7 @@ The verification gate is itself under test, continuously.
 1. **Seeded mutations.** Known-bad claims injected into falsification batches; templates drawn from the weakness registry (observed failure shapes) plus synthetic classes. A falsifier that never finds errors is either facing a great extractor or is lazy; seeding tells the difference and yields live gate recall.
 2. **Conditional miss rates.** Of mutations the extractor plausibly produces, measure the fraction missed by (a) same-base falsifier adapter vs. (b) cross-family anchor. This directly quantifies the correlation penalty and sets tier trust weights from data instead of priors.
 3. **Retrain-triggered re-audit.** Mandatory after every adapter promotion (extractor or falsifier) and any anchor change. The feedback-collapse failure mode presents as same-base kill rate improving on *old* error classes while silently degrading on whatever the new generation invents — only a refreshed seeded audit sees it.
-4. **Falsifier scoring.** Falsifiers are scored on kills against seeded ground truth (Killhouse pattern), never on agreement.
+4. **Falsifier scoring.** Falsifiers are scored on kills against seeded ground truth, never on agreement.
 
 ## 12. Metrics and Kill Criteria
 
@@ -212,8 +212,8 @@ Ascending ambition; the wiki is the intermediate representation feeding all down
 
 1. **Lookup replaces exploration** — the agent reads three concept pages instead of twenty greps. ~80% of expected savings; trivially benchmarkable.
 2. **Task-scoped context compilation** — a router assembles the linked-concept bundle for a task instead of naive top-k chunks; trust tiers are surfaced to the consumer.
-3. **Distillation** — recurring *procedural* knowledge graduates to skills (existing seven-metric eval decides admission); declarative facts stay in the wiki.
-4. **Weight-baking** — high-confidence stable knowledge trains LoRA adapters via the Amesh pipeline: zero context cost, slow cycle, hard invalidation; reserved for the most stable core.
+3. **Distillation** — recurring *procedural* knowledge graduates to skills (a seven-metric eval decides admission); declarative facts stay in the wiki.
+4. **Weight-baking** — high-confidence stable knowledge trains LoRA adapters via a dedicated weight-baking pipeline: zero context cost, slow cycle, hard invalidation; reserved for the most stable core.
 5. **CAG acceleration** — precomputed prefix KV cache of the hot stable core on owned vLLM; a local-only economic advantage.
 
 ## 14. Staleness Contract
@@ -228,7 +228,7 @@ Ascending ambition; the wiki is the intermediate representation feeding all down
 
 - **P0 — Prove the thesis (gate: kill criteria 1).** Labeled 100-file sample; model floor experiment (§5.5); mechanical verification harness; OKF bundle schema; T1/T2 stock-model pipeline on one repo; paired-run token benchmark, **baseline arm only** — pre-Loam token counts on matched tasks, which needs no wiki and no consumption layer; the treatment arm lands with Consumption P0 (dependency ordering: P0 Experiment Protocol).
 - **P1 — The gate.** Sampling engine (§8) with dual ledgers and exact-binomial math; seeded-mutation audit; conflict objects; trust tiers; dirty-set incremental runs.
-- **P2 — Compounding.** Extraction + triage + falsifier adapters with the §10 loop; weakness registry; unexplained bucket + abductive coordinate proposal; T1.5 multi-LoRA serving; TraceStore trace ingestion into the corpus (§3).
+- **P2 — Compounding.** Extraction + triage + falsifier adapters with the §10 loop; weakness registry; unexplained bucket + abductive coordinate proposal; T1.5 multi-LoRA serving; downstream-consumer trace ingestion into the corpus (§3).
 - **P3 — Consumption.** Context-bundle router; use-time promotion/demotion wiring into agent workflows; skill-graduation pipeline; CAG hot core; (stretch) LoRA weight-baking of the verified core.
 
 ## 16. Open Questions
@@ -236,7 +236,7 @@ Ascending ambition; the wiki is the intermediate representation feeding all down
 1. PEFT/QLoRA target-module support for Qwen3.6 Gated DeltaNet layers (blocker check for §10; fallback base: Qwen3-30B-A3B-Instruct-2507).
 2. Anchor choice under memory/strength trade: GPT-OSS-120B (stronger, ~60GB, tight KV) vs. Nemotron 3 Nano (~17GB, 80GB+ KV headroom) vs. Nano-resident + nightly 120B heavy-falsification phase. **Census-by-default (ADR-0001) tilts this toward throughput** — the anchor now falsifies every soft claim — favoring the Nano-resident + nightly-120B option; final choice is a P0 selection criterion.
 3. Soft-claim ontology v0: which claim types beyond mechanical (intent, convention, gotcha, rationale, contract) and their per-type tolerances.
-4. TraceStore integration surface for heat signals and use-time promotion events (schema addition vs. sidecar).
+4. Downstream telemetry consumer integration surface for heat signals and use-time promotion events (schema addition vs. sidecar).
 5. Human queue UX for conflict objects and weakness-registry review (git-based? TUI?).
 6. Default per-stratum tolerances and the GPU-hour budget for the nightly run (empirical after P0). **Anchor-claims-per-GPU-hour is promoted to a P0 primary readout (ADR-0001)**: it sizes the gardening window and calibrates the §6 pre-flight census/sampling estimator.
 7. Qwen3.5↔Qwen3.6 tokenizer compatibility — verify before any design relies on a shared tokenizer (no re-tokenization) between triage (S0) and extraction (S1); the two stages deliberately use different model lines (§5 naming notes).
