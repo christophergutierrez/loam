@@ -2,6 +2,7 @@
 //! logic; this binary parses args, resolves the bundle, and prints.
 
 use clap::{Parser, Subcommand};
+use loam_core::assemble::{assemble, AssembledBundle};
 use loam_core::bundle::resolve_bundle;
 use loam_core::get::{get, GetResult};
 use loam_core::search::{search, SearchHit};
@@ -25,6 +26,13 @@ enum Cmd {
     Get { concept: String },
     /// Find concepts matching the given terms.
     Search { terms: Vec<String> },
+    /// Assemble a task-scoped context bundle (seed by search + link traversal).
+    Bundle {
+        task: Vec<String>,
+        /// Max concepts to include (size cap).
+        #[arg(long, default_value_t = 16)]
+        max: usize,
+    },
 }
 
 fn main() -> ExitCode {
@@ -69,6 +77,19 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Cmd::Bundle { task, max } => {
+            let task = task.join(" ");
+            match assemble(&bundle_dir, &task, max, spool.as_ref(), &harness, "cli") {
+                Ok(b) => {
+                    print_bundle(&b, cli.json);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("loam bundle: {e:#}");
+                    ExitCode::from(1)
+                }
+            }
+        }
     }
 }
 
@@ -104,6 +125,25 @@ fn print_search(hits: &[SearchHit], json: bool) {
     } else {
         for h in hits {
             println!("[{}] {}", h.trust_tier, h.concept_id);
+        }
+    }
+}
+
+fn print_bundle(b: &AssembledBundle, json: bool) {
+    if json {
+        let v = serde_json::json!({
+            "concepts": b.concepts.iter()
+                .map(|c| serde_json::json!({"concept_id": c.concept_id, "trust_tier": c.trust_tier}))
+                .collect::<Vec<_>>(),
+            "capped": b.capped,
+        });
+        println!("{}", serde_json::to_string_pretty(&v).unwrap());
+    } else {
+        for c in &b.concepts {
+            println!("[{}] {}", c.trust_tier, c.concept_id);
+        }
+        if b.capped {
+            println!("… (size cap reached; more concepts available)");
         }
     }
 }
